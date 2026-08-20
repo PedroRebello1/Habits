@@ -151,6 +151,9 @@ const EN = {
   'set.whenLight': 'When light',
   'set.accent': 'Accent colour',
   'set.accentHelp': 'The accent colours buttons, the focus ring and the marker on today. Each theme has its own; set one here to override them all.',
+  'set.exclusive': 'Theme only for this app',
+  'set.exclusiveOffHelp': 'The theme is shared with your other apps: change it here and they follow. Turn this on to give Habit Grid a look of its own.',
+  'set.exclusiveOnHelp': 'Habit Grid keeps its own theme. Changing the theme in your other apps no longer affects it, and changing it here no longer affects them.',
   'set.autoHelp': 'Auto follows your phone between the two themes above. The accent colour applies to whichever is showing.',
   'set.gridSection': 'Grid',
   'set.weekStart': 'Week starts on',
@@ -231,6 +234,8 @@ const EN = {
 
   'theme.ledger': 'Ledger', 'theme.black': 'True black', 'theme.slate': 'Slate',
   'theme.midnight': 'Midnight', 'theme.paper': 'Paper', 'theme.daylight': 'Daylight',
+  'theme.ambar': 'Amber', 'theme.safira': 'Sapphire', 'theme.esmeralda': 'Emerald',
+  'theme.violeta': 'Violet', 'theme.coral': 'Coral', 'theme.sunset': 'Sunset',
 };
 
 const PT = {
@@ -368,6 +373,9 @@ const PT = {
   'set.whenLight': 'No claro',
   'set.accent': 'Cor de destaque',
   'set.accentHelp': 'O destaque colore botões, o anel de foco e a marca do dia de hoje. Cada tema tem a sua; defina uma aqui para valer em todos.',
+  'set.exclusive': 'Tema só deste app',
+  'set.exclusiveOffHelp': 'O tema é compartilhado com seus outros apps: mude aqui e eles acompanham. Ative para dar ao Habit Grid um visual próprio.',
+  'set.exclusiveOnHelp': 'O Habit Grid mantém o tema dele. Mudar o tema nos outros apps não afeta mais este, e mudar aqui não afeta os outros.',
   'set.autoHelp': 'O modo automático segue o aparelho entre os dois temas acima. A cor de destaque vale para o que estiver aparecendo.',
   'set.gridSection': 'Grade',
   'set.weekStart': 'A semana começa em',
@@ -448,6 +456,8 @@ const PT = {
 
   'theme.ledger': 'Livro-razão', 'theme.black': 'Preto absoluto', 'theme.slate': 'Ardósia',
   'theme.midnight': 'Meia-noite', 'theme.paper': 'Papel', 'theme.daylight': 'Luz do dia',
+  'theme.ambar': 'Âmbar', 'theme.safira': 'Safira', 'theme.esmeralda': 'Esmeralda',
+  'theme.violeta': 'Violeta', 'theme.coral': 'Coral', 'theme.sunset': 'Poente',
 };
 
 const LOCALES = {

@@ -71,9 +71,10 @@ state.subscribe((detail) => {
   if (!current) return;
   if (detail.wholesale) {
     // An import or a backup restore can carry a different language, theme and
-    // accent. Re-apply them before painting, or the screen keeps the old ones.
+    // accent. Adopt them into the shared preference before painting, or the
+    // screen keeps the old ones — and the other apps never hear about it.
     views.applyLang();
-    views.applyTheme();
+    views.adoptThemeFromStore();
   }
   const structural = detail.added || detail.deleted || detail.restored
     || detail.reordered || detail.wholesale;
@@ -92,13 +93,10 @@ storage.onExternalChange((next) => {
   views.toast(t('app.otherTab'));
 });
 
-// Auto theme follows the OS, including a change while the app is open.
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-const onSchemeChange = () => {
-  if (state.settings().theme === 'auto') { views.applyTheme(); render(); }
-};
-if (darkQuery.addEventListener) darkQuery.addEventListener('change', onSchemeChange);
-else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
+// The shared theme engine handles both the OS following 'auto' and another app
+// on this origin changing the theme in its own tab. Either way, repaint: the
+// grid reads colours in JS as well as CSS.
+views.watchTheme(() => render());
 
 // A tab left open overnight must not tick yesterday.
 function checkRollover() {
@@ -154,6 +152,13 @@ if ('serviceWorker' in navigator) {
 
 state.boot();
 views.applyLang();
+
+// First run after the shared theme arrived: this install already had a theme
+// stored inside its own settings, and it should keep looking exactly the same.
+// Adopt it into the shared preference once, then let the shared one lead.
+if (!localStorage.getItem(window.MyAppsTheme.KEY)) views.adoptThemeFromStore();
+else views.syncThemeToStore();
 views.applyTheme();
+
 if (!location.hash) location.replace(state.isFresh() ? '#/welcome' : '#/home');
 render();

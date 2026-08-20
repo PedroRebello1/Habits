@@ -43,33 +43,22 @@ export const SWATCHES = [
   '#3FA9A0', '#7CA05A', '#A0A052', '#A9A29A',
 ];
 
-export const THEMES = [
-  { id: 'ledger',   label: 'Ledger',     mode: 'dark' },
-  { id: 'black',    label: 'True black', mode: 'dark' },
-  { id: 'slate',    label: 'Slate',      mode: 'dark' },
-  { id: 'midnight', label: 'Midnight',   mode: 'dark' },
-  { id: 'paper',    label: 'Paper',      mode: 'light' },
-  { id: 'daylight', label: 'Daylight',   mode: 'light' },
-];
-export const DEFAULT_THEME = 'ledger';
+// The palette now lives in js/theme.js, shared byte-for-byte with the other
+// apps on this origin so a theme picked in one is the theme in all of them.
+// This app id is what the exclusive-theme switch keys off.
+const APP_ID = 'habits';
+const Theme = window.MyAppsTheme;
+
+export const THEMES = Theme.THEMES;
+export const DEFAULT_THEME = Theme.DEFAULT_THEME;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Black or white, whichever reads better on the given colour. Used for text
  *  sitting on an accent button or on a filled cell, so a custom colour cannot
- *  produce an unreadable label. */
-export function inkOn(color) {
-  const hex = String(color || '').trim();
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return '#14120F';
-  const n = parseInt(m[1], 16);
-  const lin = (c) => {
-    const v = c / 255;
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  };
-  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return (L + 0.05) / 0.05 >= 1.05 / (L + 0.05) ? '#14120F' : '#FFFFFF';
-}
+ *  produce an unreadable label. Lives in the shared theme engine now, since
+ *  the dashboard needs the same rule for the same reason. */
+export const inkOn = Theme.inkOn;
 
 /** Inline style for anything tinted by one habit. */
 export function habitStyle(hb) {
@@ -1365,6 +1354,7 @@ export function settings() {
 
   el.appendChild(h('div', { class: 'section-title', text: t('set.appearance') }));
 
+  const pref = themePrefs();
   const themeOptions = THEMES.map(x => ({
     value: x.id,
     label: x.mode === 'light' ? t('set.themeLight', { name: themeLabel(x.id) }) : themeLabel(x.id),
@@ -1378,24 +1368,26 @@ export function settings() {
         setLang(v);
         rerender();
       }),
-    selectRow(t('set.theme'), s.theme, themeOptions, (v) => {
-      state.setSettings({ theme: v });
-      applyTheme();
+    selectRow(t('set.theme'), pref.theme, themeOptions, (v) => {
+      setThemePrefs({ theme: v });
       rerender();
     }));
 
-  if (s.theme === 'auto') {
-    appearance.appendChild(selectRow(t('set.whenDark'), s.autoDark,
+  if (pref.theme === 'auto') {
+    appearance.appendChild(selectRow(t('set.whenDark'), pref.autoDark,
       THEMES.filter(x => x.mode === 'dark').map(x => ({ value: x.id, label: themeLabel(x.id) })),
-      (v) => { state.setSettings({ autoDark: v }); applyTheme(); }));
-    appearance.appendChild(selectRow(t('set.whenLight'), s.autoLight,
+      (v) => { setThemePrefs({ autoDark: v }); }));
+    appearance.appendChild(selectRow(t('set.whenLight'), pref.autoLight,
       THEMES.filter(x => x.mode === 'light').map(x => ({ value: x.id, label: themeLabel(x.id) })),
-      (v) => { state.setSettings({ autoLight: v }); applyTheme(); }));
+      (v) => { setThemePrefs({ autoLight: v }); }));
   }
   appearance.appendChild(accentRow());
+  appearance.appendChild(exclusiveRow());
   el.appendChild(appearance);
   el.appendChild(h('p', { class: 'help',
-    text: t(s.theme === 'auto' ? 'set.autoHelp' : 'set.accentHelp') }));
+    text: t(pref.theme === 'auto' ? 'set.autoHelp' : 'set.accentHelp') }));
+  el.appendChild(h('p', { class: 'help',
+    text: t(themeIsExclusive() ? 'set.exclusiveOnHelp' : 'set.exclusiveOffHelp') }));
 
   el.appendChild(h('div', { class: 'section-title', text: t('set.gridSection') }));
   el.appendChild(h('div', { class: 'rows' },
@@ -1557,13 +1549,12 @@ export function settings() {
 }
 
 function accentRow() {
-  const custom = state.settings().accent;
+  const custom = themePrefs().accent;
   const swatch = h('input', {
     type: 'color', class: 'accent-swatch', 'aria-label': t('set.accent'),
     value: custom || themeAccent(),
     onInput: (e) => {
-      state.setSettings({ accent: e.target.value });
-      applyTheme();
+      setThemePrefs({ accent: e.target.value });
       reset.disabled = false;
     },
   });
@@ -1571,8 +1562,7 @@ function accentRow() {
     type: 'button', class: 'accent-reset', text: t('common.reset'),
     disabled: !custom,
     onClick: () => {
-      state.setSettings({ accent: null });
-      applyTheme();
+      setThemePrefs({ accent: null });
       swatch.value = themeAccent();
       reset.disabled = true;
     },
@@ -1580,6 +1570,23 @@ function accentRow() {
   return h('div', { class: 'row' },
     h('span', { text: t('set.accent') }),
     h('div', { class: 'accent-row' }, swatch, reset));
+}
+
+/** Opting out of the shared appearance. Switching it on keeps whatever is on
+ *  screen — it stops the sync, it does not change the colours. */
+function exclusiveRow() {
+  const sw = h('button', {
+    type: 'button', class: 'switch', role: 'switch',
+    'aria-checked': String(themeIsExclusive()),
+    'aria-label': t('set.exclusive'),
+    onClick: () => {
+      const next = sw.getAttribute('aria-checked') !== 'true';
+      setThemeExclusive(next);
+      sw.setAttribute('aria-checked', String(next));
+      rerender();
+    },
+  });
+  return h('div', { class: 'row' }, h('span', { text: t('set.exclusive') }), sw);
 }
 
 function selectRow(label, value, options, onChange) {
@@ -1592,45 +1599,84 @@ function selectRow(label, value, options, onChange) {
 
 /** Which theme is actually on screen — resolves 'auto' against the OS. */
 export function resolvedTheme() {
-  const s = state.settings();
-  if (s.theme === 'auto') {
-    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return dark ? (s.autoDark || 'ledger') : (s.autoLight || 'paper');
-  }
-  return THEMES.some(t => t.id === s.theme) ? s.theme : DEFAULT_THEME;
+  return Theme.resolved(APP_ID).id;
 }
 
 export function applyLang() {
   setLang(state.settings().lang || detectLang());
 }
 
+/** The shared engine owns the tokens; this just asks it to paint. Preferences
+ *  are read from the shared key (or this app's private one when it is set to
+ *  exclusive), never from the habit store — see themePrefs below. */
 export function applyTheme() {
-  const root = document.documentElement;
-  const settings = state.settings();
-  root.setAttribute('data-theme', resolvedTheme());
-
-  // One accent, applied over whichever theme is active. Clearing it falls back
-  // to that theme's own colour, which is why this reads the computed value
-  // rather than keeping a second copy of the palette in JS.
-  if (settings.accent) root.style.setProperty('--accent', settings.accent);
-  else root.style.removeProperty('--accent');
-
-  const computed = getComputedStyle(root);
-  const accent = computed.getPropertyValue('--accent').trim() || '#C6A15B';
-  root.style.setProperty('--on-accent', inkOn(accent));
-
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', computed.getPropertyValue('--ink-900').trim() || '#131210');
+  Theme.apply(APP_ID);
 }
 
 /** The accent this theme would use with no override — for the reset swatch. */
 export function themeAccent() {
-  const root = document.documentElement;
-  const had = root.style.getPropertyValue('--accent');
-  root.style.removeProperty('--accent');
-  const base = getComputedStyle(root).getPropertyValue('--accent').trim() || '#C6A15B';
-  if (had) root.style.setProperty('--accent', had);
-  return base;
+  return Theme.resolved(APP_ID).core.accent;
+}
+
+/** Appearance now lives outside the habit store so every app can see it. The
+ *  store still carries a mirror of it, which is what an export/import restores
+ *  — see syncThemeToStore. */
+export function themePrefs() {
+  return Theme.get(APP_ID);
+}
+
+export function setThemePrefs(patch) {
+  Theme.set(APP_ID, patch);
+  Theme.apply(APP_ID);
+  syncThemeToStore();
+}
+
+export function themeIsExclusive() {
+  return Theme.isExclusive(APP_ID);
+}
+
+export function setThemeExclusive(on) {
+  Theme.setExclusive(APP_ID, on);
+  Theme.apply(APP_ID);
+  syncThemeToStore();
+}
+
+/** Keeps settings.theme/accent in step with the shared preference, so an
+ *  exported backup still carries the appearance the user was looking at. */
+export function syncThemeToStore() {
+  const pref = Theme.get(APP_ID);
+  const s = state.settings();
+  if (s.theme === pref.theme && s.accent === pref.accent
+      && s.autoDark === pref.autoDark && s.autoLight === pref.autoLight) return;
+  state.setSettings({
+    theme: pref.theme,
+    accent: pref.accent,
+    autoDark: pref.autoDark,
+    autoLight: pref.autoLight,
+  });
+}
+
+/** The reverse: an import or a restore carries an appearance in its payload,
+ *  and adopting it should move the shared preference too. */
+export function adoptThemeFromStore() {
+  const s = state.settings();
+  const patch = {};
+  if (s.theme === 'auto' || Theme.resolveId(s.theme)) {
+    patch.theme = s.theme === 'auto' ? 'auto' : Theme.resolveId(s.theme);
+  }
+  if (typeof s.accent === 'string' || s.accent === null) patch.accent = s.accent;
+  if (Theme.resolveId(s.autoDark)) patch.autoDark = Theme.resolveId(s.autoDark);
+  if (Theme.resolveId(s.autoLight)) patch.autoLight = Theme.resolveId(s.autoLight);
+  Theme.set(APP_ID, patch);
+  Theme.apply(APP_ID);
+}
+
+/** Repaint when another app on this origin changes the shared theme. */
+export function watchTheme(onChange) {
+  return Theme.watch(APP_ID, () => {
+    syncThemeToStore();
+    if (onChange) onChange();
+  });
 }
 
 let rerenderHook = () => {};

@@ -15,11 +15,21 @@
 <title>Habit Grid</title>
 <meta name="description" content="A local-first habit tracker. Nothing but the grid.">
 <meta name="theme-color" content="#131210">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="stylesheet" href="./styles.css">
+
+<!--
+  The shared appearance layer, identical in every app on this origin. It is a
+  plain script rather than a module so it runs before the module graph and
+  before first paint, which is what keeps the wrong theme from flashing. It
+  touches localStorage only; connect-src 'none' above still holds, so the
+  privacy promise is unchanged.
+-->
+<script src="./js/theme.js"></script>
+<script src="./js/theme-boot.js"></script>
 </head>
 <body>
 
