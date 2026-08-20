@@ -79,6 +79,7 @@ export function addHabit(fields) {
     range: RANGE_IDS.indexOf(fields.range) >= 0 ? fields.range : state.settings.defaultRange,
     createdAt: fields.createdAt || todayKey(),
     order: state.habits.length,
+    pinned: false,
   };
   state.habits.push(h);
   state.entries[h.id] = {};
@@ -94,8 +95,25 @@ export function updateHabit(id, patch) {
   if (patch.color !== undefined) h.color = patch.color;
   if (patch.target !== undefined) h.target = Math.max(1, Math.min(20, Math.round(patch.target)));
   if (patch.range !== undefined && RANGE_IDS.indexOf(patch.range) >= 0) h.range = patch.range;
+  if (patch.pinned !== undefined) h.pinned = !!patch.pinned;
   commit(id, { updated: true });
   return h;
+}
+
+export const PIN_LIMIT = storage.PIN_LIMIT;
+
+export function pinnedHabits() {
+  return habits().filter(h => h.pinned);
+}
+
+/** Returns true if the pin took, false if the limit is already reached. */
+export function setPinned(id, on) {
+  const h = habit(id);
+  if (!h) return false;
+  if (on && !h.pinned && pinnedHabits().length >= PIN_LIMIT) return false;
+  h.pinned = !!on;
+  commit(id, { updated: true, pinned: true });
+  return true;
 }
 
 /** Removes the habit and its entries, returning a snapshot for undo. */

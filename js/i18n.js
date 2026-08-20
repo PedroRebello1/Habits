@@ -232,6 +232,15 @@ const EN = {
   'range.6m': '6 months', 'range.1y': '1 year', 'range.2y': '2 years',
   'range.5y': '5 years', 'range.10y': '10 years', 'range.all': 'All time',
 
+  'pin.add': 'Add to hub',
+  'pin.remove': 'On the hub',
+  'pin.added': '{name} now shows on the hub.',
+  'pin.removed': '{name} removed from the hub.',
+  'pin.offHelp': 'Show this habit’s grid on the MyApps home screen.',
+  'pin.onHelp': 'This habit’s grid appears on the MyApps home screen. Tap to remove it.',
+  'pin.full': 'The hub holds {n} grids. Remove one first.',
+  'pin.fullHelp': 'The hub holds {n} grids at a time. Remove one from another habit to add this one.',
+
   'theme.ledger': 'Ledger', 'theme.black': 'True black', 'theme.slate': 'Slate',
   'theme.midnight': 'Midnight', 'theme.paper': 'Paper', 'theme.daylight': 'Daylight',
   'theme.ambar': 'Amber', 'theme.safira': 'Sapphire', 'theme.esmeralda': 'Emerald',
@@ -453,6 +462,15 @@ const PT = {
   'range.1w': '1 semana', 'range.1m': '1 mês', 'range.3m': '3 meses',
   'range.6m': '6 meses', 'range.1y': '1 ano', 'range.2y': '2 anos',
   'range.5y': '5 anos', 'range.10y': '10 anos', 'range.all': 'Desde o início',
+
+  'pin.add': 'Adicionar ao hub',
+  'pin.remove': 'No hub',
+  'pin.added': '{name} agora aparece no hub.',
+  'pin.removed': '{name} saiu do hub.',
+  'pin.offHelp': 'Mostrar a grade deste hábito na tela inicial do MyApps.',
+  'pin.onHelp': 'A grade deste hábito aparece na tela inicial do MyApps. Toque para tirar.',
+  'pin.full': 'O hub comporta {n} grades. Tire uma antes.',
+  'pin.fullHelp': 'O hub comporta {n} grades por vez. Tire a de outro hábito para pôr esta.',
 
   'theme.ledger': 'Livro-razão', 'theme.black': 'Preto absoluto', 'theme.slate': 'Ardósia',
   'theme.midnight': 'Meia-noite', 'theme.paper': 'Papel', 'theme.daylight': 'Luz do dia',

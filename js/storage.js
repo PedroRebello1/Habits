@@ -11,6 +11,12 @@ export const KEY = 'habitgrid.v1';
 export const BACKUP_KEY = 'habitgrid.backup';
 export const SCHEMA = 1;
 
+/** How many habits the hub may show as a full grid before it falls back to the
+ *  compact one-line-per-habit list. Past this the grids are too short to read.
+ *  Lives here rather than in state.js so normalise() can enforce it without an
+ *  import cycle. */
+export const PIN_LIMIT = 3;
+
 const listeners = { error: [], external: [] };
 let timer = null;
 let pending = null;
@@ -84,8 +90,13 @@ export function normalise(data) {
     if (typeof h.target !== 'number' || h.target < 1) h.target = 1;
     // The colour lands in a style attribute, so it never gets there unchecked.
     if (typeof h.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(h.color)) h.color = '#C6A15B';
+    h.pinned = h.pinned === true;
     if (!out.entries[h.id]) out.entries[h.id] = {};
   });
+  // An imported payload could pin more than the hub can draw. That is left
+  // alone on purpose: the pins are the user's, and the hub already handles the
+  // over-limit case by falling back to its compact list. Silently unpinning
+  // here would quietly discard a choice the file was explicit about.
   return out;
 }
 

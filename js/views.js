@@ -768,10 +768,39 @@ export function detail(id) {
 
   const cal = h('div', { class: 'cal' });
   const statsBox = h('div', { class: 'stats' });
+  const pinBox = h('div');
   const started = h('p', { class: 'help', style: 'margin-top:14px' });
   el.appendChild(cal);
   el.appendChild(statsBox);
+  el.appendChild(pinBox);
   el.appendChild(started);
+
+  /** Pinning shows this habit's grid on the hub's home screen. Only a few fit
+   *  before they stop being readable, so the button says why it is unavailable
+   *  rather than simply going dead. */
+  function paintPin() {
+    pinBox.textContent = '';
+    const pinned = !!hb.pinned;
+    const full = !pinned && state.pinnedHabits().length >= state.PIN_LIMIT;
+
+    const btn = h('button', {
+      type: 'button',
+      class: 'btn' + (pinned ? ' btn-primary' : ''),
+      disabled: full,
+      onClick: () => {
+        const ok = state.setPinned(hb.id, !pinned);
+        if (!ok) { toast(t('pin.full', { n: state.PIN_LIMIT }), { error: true }); return; }
+        hb.pinned = !pinned;
+        paintPin();
+        toast(t(hb.pinned ? 'pin.added' : 'pin.removed', { name: hb.name }));
+      },
+    }, icon(pinned ? 'check' : 'grid'), t(pinned ? 'pin.remove' : 'pin.add'));
+
+    pinBox.appendChild(btn);
+    pinBox.appendChild(h('p', { class: 'help',
+      text: full ? t('pin.fullHelp', { n: state.PIN_LIMIT })
+        : pinned ? t('pin.onHelp') : t('pin.offHelp') }));
+  }
 
   const shiftMonth = (ym, n) => addMonths(ym + '-01', n).slice(0, 7);
   const write = writeFor(hb);
@@ -993,10 +1022,11 @@ export function detail(id) {
 
   buildCalendar();
   paintStats();
+  paintPin();
 
   return {
     el,
-    update() { refreshCells(); paintStats(); },
+    update() { refreshCells(); paintStats(); paintPin(); },
   };
 }
 
