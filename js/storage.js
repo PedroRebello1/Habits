@@ -24,10 +24,14 @@ export function defaultState() {
     username: '',
     settings: {
       weekStart: 1,
-      theme: 'dark',
+      theme: 'ledger',
+      accent: null,          // null = use the theme's own accent
+      autoDark: 'ledger',
+      autoLight: 'paper',
       defaultRange: '1y',
       density: 'auto',
       lastExport: null,
+      nudgeSnoozedAt: null,
     },
     habits: [],
     entries: {},
@@ -64,6 +68,12 @@ export function normalise(data) {
     habits: Array.isArray(data.habits) ? data.habits : [],
     entries: (data.entries && typeof data.entries === 'object') ? data.entries : {},
   };
+  // v1 shipped with two themes named dark/black; dark became "ledger" when the
+  // palette grew.
+  if (out.settings.theme === 'dark') out.settings.theme = 'ledger';
+  if (typeof out.settings.accent !== 'string' || !/^#[0-9a-f]{6}$/i.test(out.settings.accent)) {
+    out.settings.accent = null;
+  }
   out.habits.forEach((h, i) => {
     if (typeof h.order !== 'number') h.order = i;
     if (!h.icon || typeof h.icon !== 'object') h.icon = { type: 'letter', value: (h.name || '?')[0] };

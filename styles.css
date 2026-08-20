@@ -2,7 +2,14 @@
    Warm near-black paper, hairline rules, tabular figures, restraint everywhere
    except the grid itself. */
 
-:root {
+/* Six themes plus Auto. Every one defines the same tokens, so nothing else in
+   the sheet needs to know which is active. --accent is the interface colour
+   (focus, today, active tab, primary buttons); it is overridable per install
+   from Settings. --on-accent and --on-fill are computed in JS from whatever
+   accent ends up applied, so custom colours stay readable. */
+
+:root, [data-theme='ledger'] {
+  color-scheme: dark;
   --ink-900: #131210;   /* page */
   --ink-800: #1C1A17;   /* card */
   --ink-700: #232019;   /* raised control */
@@ -11,12 +18,107 @@
   --chalk: #EDE7DA;
   --chalk-dim: #9A9186;
   --chalk-faint: #6C645A;
-  --brass: #C6A15B;
-  --brass-dim: #8A7141;
+  --accent: #C6A15B;
+  --on-fill: #14120F;
+  --scrim: rgba(6, 5, 4, .62);
+  --shadow: rgba(0, 0, 0, .5);
   --danger: #C8654A;
+}
 
+/* True black, for OLED. */
+[data-theme='black'] {
+  color-scheme: dark;
+  --ink-900: #000000;
+  --ink-800: #0C0B0A;
+  --ink-700: #151311;
+  --ink-600: #1F1D1A;
+  --hairline: #262320;
+  --chalk: #EDE7DA;
+  --chalk-dim: #9A9186;
+  --chalk-faint: #6C645A;
+  --accent: #C6A15B;
+  --on-fill: #0A0908;
+  --scrim: rgba(0, 0, 0, .7);
+  --shadow: rgba(0, 0, 0, .65);
+  --danger: #C8654A;
+}
+
+/* Cool graphite. */
+[data-theme='slate'] {
+  color-scheme: dark;
+  --ink-900: #10131A;
+  --ink-800: #171B24;
+  --ink-700: #1E232E;
+  --ink-600: #262C38;
+  --hairline: #2C3340;
+  --chalk: #E4E8EF;
+  --chalk-dim: #909AAB;
+  --chalk-faint: #626C7C;
+  --accent: #79A9CF;
+  --on-fill: #0C0F14;
+  --scrim: rgba(4, 7, 12, .64);
+  --shadow: rgba(0, 0, 0, .55);
+  --danger: #D2705A;
+}
+
+/* Deep indigo. */
+[data-theme='midnight'] {
+  color-scheme: dark;
+  --ink-900: #0D0F1C;
+  --ink-800: #141726;
+  --ink-700: #1B1F32;
+  --ink-600: #232840;
+  --hairline: #2A2F48;
+  --chalk: #E6E4F2;
+  --chalk-dim: #9791B4;
+  --chalk-faint: #6A6588;
+  --accent: #8E97F5;
+  --on-fill: #0A0B14;
+  --scrim: rgba(4, 5, 14, .66);
+  --shadow: rgba(0, 0, 0, .6);
+  --danger: #E0708A;
+}
+
+/* The ledger in daylight: warm paper, ink, the same brass. */
+[data-theme='paper'] {
+  color-scheme: light;
+  --ink-900: #F1ECDF;
+  --ink-800: #FBF7ED;
+  --ink-700: #EFE8D8;
+  --ink-600: #E2DAC6;
+  --hairline: #DCD2BC;
+  --chalk: #221F19;
+  --chalk-dim: #6B6252;
+  --chalk-faint: #948B78;
+  --accent: #97762B;
+  --on-fill: #1B1811;
+  --scrim: rgba(40, 33, 20, .38);
+  --shadow: rgba(60, 50, 30, .18);
+  --danger: #B0472C;
+}
+
+/* Cool, plain daylight. */
+[data-theme='daylight'] {
+  color-scheme: light;
+  --ink-900: #F4F6F8;
+  --ink-800: #FFFFFF;
+  --ink-700: #EDF0F4;
+  --ink-600: #E1E6EC;
+  --hairline: #D8DEE6;
+  --chalk: #14181E;
+  --chalk-dim: #5C6673;
+  --chalk-faint: #8A94A1;
+  --accent: #2F6FAF;
+  --on-fill: #101418;
+  --scrim: rgba(20, 30, 45, .38);
+  --shadow: rgba(30, 45, 70, .16);
+  --danger: #C0392B;
+}
+
+:root {
   --cell-empty: var(--ink-600);
-  --habit: var(--brass);
+  --habit: var(--accent);
+  --on-accent: #14120F;   /* replaced at runtime to suit the applied accent */
 
   --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua',
                   'Noto Serif', Georgia, 'Times New Roman', serif;
@@ -26,16 +128,6 @@
   --radius: 14px;
   --bar-h: 62px;
   --safe-b: env(safe-area-inset-bottom, 0px);
-}
-
-/* The one alternative theme: true black for OLED. A light theme is deliberately
-   deferred — the ledger direction may never need one. */
-[data-theme='black'] {
-  --ink-900: #000000;
-  --ink-800: #0C0B0A;
-  --ink-700: #151311;
-  --ink-600: #1F1D1A;
-  --hairline: #262320;
 }
 
 * { box-sizing: border-box; }
@@ -69,7 +161,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -154,8 +246,8 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
 }
 
 .card.is-dragging { opacity: .55; }
-.card.drop-before { box-shadow: 0 -2px 0 var(--brass); }
-.card.drop-after { box-shadow: 0 2px 0 var(--brass); }
+.card.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.card.drop-after { box-shadow: 0 2px 0 var(--accent); }
 
 .card-head {
   display: flex;
@@ -247,7 +339,7 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
 .tick .ico { width: 17px; height: 17px; stroke-width: 2.1; }
 .tick.is-done {
   background: var(--habit);
-  color: var(--ink-900);
+  color: var(--on-fill);
   border-color: var(--habit);
 }
 .tick.is-part {
@@ -298,7 +390,7 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
   position: absolute;
   top: calc(0px - var(--label-h, 0px));
   bottom: 0;
-  left: calc(0px - var(--gap, 2px) / 2 - .5px);
+  left: calc(0px - (var(--gap, 2px) + var(--month-gap, 0px)) / 2 - .5px);
   width: 1px;
   background: var(--hairline);
   pointer-events: none;
@@ -349,9 +441,9 @@ h1, h2, h3 { margin: 0; font-weight: 500; }
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--ink-600);
 }
-.cell.is-today { box-shadow: inset 0 0 0 1.5px var(--brass); }
+.cell.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
 button.cell:active { transform: scale(.88); }
-button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; z-index: 3; }
+button.cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 3; }
 
 @supports not (background: color-mix(in oklab, red 50%, blue)) {
   .cell { background: var(--cell-empty); }
@@ -371,8 +463,8 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
 .grid-today {
   position: absolute;
   width: 1px;
-  background: var(--brass);
-  opacity: .5;
+  background: var(--accent);
+  opacity: .62;
   pointer-events: none;
 }
 
@@ -419,7 +511,7 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   font-size: 12px;
   color: var(--chalk-dim);
 }
-.week-head span.is-today b { color: var(--brass); }
+.week-head span.is-today b { color: var(--accent); }
 
 .week-row { padding: 7px 2px; }
 .week-row + .week-row { border-top: 1px solid var(--hairline); }
@@ -449,13 +541,14 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
       var(--habit) calc(var(--level, 0) * 70% + 30%), var(--cell-empty));
   font-family: var(--font-mono);
   font-size: 11px;
-  color: color-mix(in oklab, var(--ink-900) 82%, var(--chalk));
+  color: var(--chalk-dim);
   display: grid;
   place-items: center;
   transition: background-color .18s ease;
 }
 .week-cell.is-empty { background: var(--cell-empty); color: var(--chalk-faint); }
-.week-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--brass); }
+.week-cell.is-bright, .zoom-cell.is-bright { color: var(--on-fill); }
+.week-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .week-cell:active { transform: scale(.92); }
 
 @supports not (background: color-mix(in oklab, red 50%, blue)) {
@@ -514,9 +607,9 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   letter-spacing: .03em;
 }
 .chip[aria-pressed='true'] {
-  color: var(--ink-900);
-  background: var(--brass);
-  border-color: var(--brass);
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .field { margin-bottom: 18px; }
@@ -537,7 +630,7 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   color: var(--chalk);
   font-size: 16px;
 }
-.input:focus { outline: none; border-color: var(--brass); }
+.input:focus { outline: none; border-color: var(--accent); }
 .help { font-size: 12.5px; color: var(--chalk-dim); margin-top: 8px; line-height: 1.5; }
 
 .btn {
@@ -555,9 +648,9 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
 }
 .btn:active { transform: scale(.985); }
 .btn-primary {
-  background: var(--brass);
-  border-color: var(--brass);
-  color: var(--ink-900);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   font-weight: 500;
 }
 .btn-danger { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 40%, var(--hairline)); }
@@ -739,11 +832,11 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   z-index: 41;
   width: 52px; height: 52px;
   border-radius: 999px;
-  background: var(--brass);
-  color: var(--ink-900);
+  background: var(--accent);
+  color: var(--on-accent);
   display: grid;
   place-items: center;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, .5);
+  box-shadow: 0 6px 22px var(--shadow);
 }
 .fab .ico { width: 24px; height: 24px; stroke-width: 2.2; }
 .fab:active { transform: scale(.93); }
@@ -754,7 +847,7 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgba(6, 5, 4, .62);
+  background: var(--scrim);
   animation: fade .18s ease;
 }
 .sheet {
@@ -796,7 +889,7 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   border: 1px solid var(--hairline);
   border-radius: 12px;
   padding: 9px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+  box-shadow: 0 10px 30px var(--shadow);
   animation: fade .12s ease;
 }
 .pop .date {
@@ -828,13 +921,13 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
       var(--habit) calc(var(--level, 0) * 70% + 30%), var(--cell-empty));
   font-family: var(--font-mono);
   font-size: 11px;
-  color: color-mix(in oklab, var(--ink-900) 80%, var(--chalk));
+  color: var(--chalk-dim);
   display: grid;
   place-items: center;
 }
 .zoom-cell.is-empty { background: var(--cell-empty); color: var(--chalk-faint); }
 .zoom-cell.is-blank { background: none; }
-.zoom-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--brass); }
+.zoom-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
 
 /* ── toasts ───────────────────────────────────────────────────────────────── */
 
@@ -861,13 +954,13 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   border-radius: 11px;
   background: var(--ink-700);
   border: 1px solid var(--hairline);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+  box-shadow: 0 8px 26px var(--shadow);
   font-size: 14px;
   animation: rise .2s ease;
 }
 .toast .msg { flex: 1; line-height: 1.35; }
 .toast button {
-  color: var(--brass);
+  color: var(--accent);
   font-size: 14px;
   font-weight: 500;
   padding: 4px 2px;
@@ -889,8 +982,8 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   color: var(--chalk-dim);
   margin-bottom: 12px;
 }
-.banner button { color: var(--brass); font-size: 13.5px; flex: none; }
-.banner .ico { color: var(--brass); }
+.banner button { color: var(--accent); font-size: 13.5px; flex: none; }
+.banner .ico { color: var(--accent); }
 
 .empty {
   text-align: center;
@@ -943,6 +1036,146 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
   margin-bottom: 20px;
 }
 
+
+/* ── calendar view ────────────────────────────────────────────────────────── */
+
+.cal { margin: 4px 0 18px; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.cal-title {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-nav {
+  width: 40px; height: 40px;
+  flex: none;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  color: var(--chalk-dim);
+}
+.cal-nav:hover { background: var(--ink-800); color: var(--chalk); }
+.cal-nav:disabled { opacity: .25; cursor: default; }
+.cal-nav.next svg { transform: scaleX(-1); }
+.cal-today {
+  flex: none;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--accent);
+}
+
+.cal-wd {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cal-wd span {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--chalk-faint);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  touch-action: pan-y;
+}
+
+.cal-cell {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 10px;
+  background: color-mix(in oklab,
+      var(--habit) calc(var(--level, 0) * 70% + 30%), var(--cell-empty));
+  color: var(--chalk);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transition: background-color .18s ease;
+}
+.cal-cell .d {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  line-height: 1;
+}
+.cal-cell .c {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1;
+  opacity: .85;
+}
+.cal-cell.is-empty { background: var(--cell-empty); color: var(--chalk-dim); }
+.cal-cell.is-bright { color: var(--on-fill); }
+.cal-cell.is-blank { background: none; pointer-events: none; }
+.cal-cell.is-future { background: none; color: var(--chalk-faint); opacity: .45; }
+.cal-cell.is-pre {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ink-600);
+  color: var(--chalk-faint);
+}
+.cal-cell.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-cell:active { transform: scale(.94); }
+.cal-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 2; }
+
+@supports not (background: color-mix(in oklab, red 50%, blue)) {
+  .cal-cell { background: var(--cell-empty); }
+}
+
+.cal-month-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--chalk-faint);
+}
+
+/* ── settings extras ──────────────────────────────────────────────────────── */
+
+.banner .close {
+  width: 28px; height: 28px;
+  flex: none;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  color: var(--chalk-faint);
+}
+.banner .close:hover { color: var(--chalk); background: var(--ink-700); }
+.banner .close .ico { width: 15px; height: 15px; }
+
+.accent-row { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.accent-swatch {
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  padding: 0;
+  background: none;
+  overflow: hidden;
+  cursor: pointer;
+  flex: none;
+}
+.accent-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
+.accent-swatch::-webkit-color-swatch { border: none; border-radius: 999px; }
+.accent-reset { font-size: 13px; color: var(--accent); flex: none; }
+.accent-reset:disabled { color: var(--chalk-faint); cursor: default; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
@@ -950,5 +1183,6 @@ button.cell:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px
     transition-duration: .001ms !important;
     scroll-behavior: auto !important;
   }
-  button.cell:active, .tick:active, .fab:active, .week-cell:active { transform: none; }
+  button.cell:active, .tick:active, .fab:active, .week-cell:active,
+  .cal-cell:active { transform: none; }
 }

@@ -3,8 +3,9 @@
 //
 // The layout is described by a plan whose columns are produced lazily via
 // colAt(i), so a decade of day cells costs no memory until it is scrolled into
-// view. Columns are a fixed pitch, so the visible window is arithmetic —
-// startCol = floor(scrollLeft / pitch). No measuring, no layout thrash.
+// view. Column positions are precomputed once per layout — they are not a plain
+// multiple of the pitch, because months are set a little apart — so finding the
+// visible window is a binary search rather than any measuring of the DOM.
 
 import {
   todayKey, addDays, diffDays, startOfWeek, monthOf, yearOf, dayOf,
@@ -20,12 +21,12 @@ const DENSITY = {
   '1y':  { unit: 'day',   size: 11, gap: 2 },
   '2y':  { unit: 'day',   size: 9,  gap: 2 },
   '5y':  { unit: 'week',  size: 12, gap: 3 },
-  '10y': { unit: 'month', size: 22, gap: 4 },
+  '10y': { unit: 'month', size: 21, gap: 4 },
 };
 const FORCED = {
   day:   { size: 11, gap: 2 },
   week:  { size: 12, gap: 3 },
-  month: { size: 22, gap: 4 },
+  month: { size: 21, gap: 4 },
 };
 const VIRTUAL_THRESHOLD = 60;   // columns beyond which the render is windowed
 const BUFFER = 8;               // columns kept either side of the viewport
@@ -77,9 +78,25 @@ function dayPlan(startKey, today, weekStart, size, gap, single) {
   const lastCol = startOfWeek(today, weekStart);
   const cols = Math.floor(diffDays(gridStart, lastCol) / 7) + 1;
   const labelH = 15;
+
+  // A hair of extra space where one month gives way to the next — enough to
+  // read them apart, far less than the year blocks in the five-year view.
+  // Column positions stop being i * pitch once that is in, so they are
+  // precomputed and the virtualizer binary-searches them.
+  const monthGap = Math.max(2, Math.round(size * 0.25));
+  const xs = new Array(cols);
+  let x = 0, prevMonth = 0;
+  for (let i = 0; i < cols; i++) {
+    const m = monthOf(addDays(gridStart, i * 7));
+    if (i > 0 && m !== prevMonth) x += monthGap;
+    xs[i] = x;
+    x += pitch;
+    prevMonth = m;
+  }
+
   return {
-    unit: 'day', rows: 7, cols, pitch, size, gap, labelH, gutterW: 0,
-    width: cols * pitch - gap, height: labelH + 7 * pitch - gap,
+    unit: 'day', rows: 7, cols, pitch, size, gap, labelH, gutterW: 0, monthGap, xs,
+    width: x - gap, height: labelH + 7 * pitch - gap,
     colAt(i) {
       const ws = addDays(gridStart, i * 7);
       const cells = [];
@@ -91,7 +108,7 @@ function dayPlan(startKey, today, weekStart, size, gap, single) {
       const prev = i > 0 ? addDays(gridStart, (i - 1) * 7) : null;
       const label = (!prev || monthOf(ws) !== monthOf(prev)) ? MONTHS[monthOf(ws) - 1] : null;
       const rule = !!prev && yearOf(ws) !== yearOf(prev);
-      return { x: i * pitch, cells, label, rule, month: monthOf(ws) };
+      return { x: xs[i], cells, label, rule, month: monthOf(ws) };
     },
   };
 }
@@ -107,15 +124,20 @@ function weekPlan(firstYear, lastYear, today, size, gap) {
   const blockW = COLS * pitch;
   const blockGap = pitch;
   const labelH = 15;
+  const cols = years.length * COLS;
+  const xs = new Array(cols);
+  for (let i = 0; i < cols; i++) {
+    xs[i] = Math.floor(i / COLS) * (blockW + blockGap) + (i % COLS) * pitch;
+  }
   return {
-    unit: 'week', rows: ROWS, cols: years.length * COLS, pitch, size, gap,
-    labelH, gutterW: 0, years,
+    unit: 'week', rows: ROWS, cols, pitch, size, gap,
+    labelH, gutterW: 0, years, xs, monthGap: 0,
     width: years.length * blockW + (years.length - 1) * blockGap - gap,
     height: labelH + ROWS * pitch - gap,
     colAt(i) {
       const b = Math.floor(i / COLS), c = i % COLS;
       const year = years[b];
-      const x = b * (blockW + blockGap) + c * pitch;
+      const x = xs[i];
       const cells = [];
       for (let r = 0; r < ROWS; r++) {
         const slot = c * ROWS + r;
@@ -135,7 +157,7 @@ function monthPlan(firstYear, lastYear, today, size, gap) {
   const pitch = size + gap;
   const years = [];
   for (let y = firstYear; y <= lastYear; y++) years.push(y);
-  const labelH = 15, gutterW = 28;
+  const labelH = 15, gutterW = 26;
   return {
     unit: 'month', rows: years.length, cols: 12, pitch, size, gap,
     labelH, gutterW, years, matrix: true,
@@ -225,6 +247,7 @@ export function createGrid(opts) {
     canvas.style.height = plan.height + 'px';
     canvas.style.setProperty('--size', plan.size + 'px');
     canvas.style.setProperty('--gap', plan.gap + 'px');
+    canvas.style.setProperty('--month-gap', (plan.monthGap || 0) + 'px');
     canvas.style.setProperty('--pitch', plan.pitch + 'px');
     canvas.style.setProperty('--label-h', plan.labelH + 'px');
     canvas.textContent = '';
@@ -258,14 +281,26 @@ export function createGrid(opts) {
     canvas.appendChild(g);
   }
 
+  /** Index of the last column starting at or before x. */
+  function colBefore(x) {
+    const xs = plan.xs;
+    if (!xs) return Math.floor(x / plan.pitch);
+    let lo = 0, hi = xs.length - 1, found = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (xs[mid] <= x) { found = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return found;
+  }
+
   function windowRange() {
     const virtual = plan.cols > VIRTUAL_THRESHOLD && !plan.matrix;
     if (!virtual) return [0, plan.cols - 1];
     const w = scroller.clientWidth;
     if (!w) return [Math.max(0, plan.cols - 40), plan.cols - 1];   // laid out later
     const sl = scroller.scrollLeft;
-    const first = Math.max(0, Math.floor(sl / plan.pitch) - BUFFER);
-    const last = Math.min(plan.cols - 1, Math.ceil((sl + w) / plan.pitch) + BUFFER);
+    const first = Math.max(0, colBefore(sl) - BUFFER);
+    const last = Math.min(plan.cols - 1, colBefore(sl + w) + BUFFER);
     return [first, last];
   }
 
@@ -521,7 +556,7 @@ export function createGrid(opts) {
 
   function setFocus(c, r, moveFocus) {
     if (!plan.matrix) {
-      const x = c * plan.pitch;
+      const x = plan.xs ? plan.xs[c] : c * plan.pitch;
       const w = scroller.clientWidth;
       if (x < scroller.scrollLeft) scroller.scrollLeft = Math.max(0, x - plan.pitch);
       else if (x + plan.pitch > scroller.scrollLeft + w) scroller.scrollLeft = x + plan.pitch - w;

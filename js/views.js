@@ -8,9 +8,9 @@ import * as state from './state.js';
 import * as storage from './storage.js';
 import * as io from './io.js';
 import { statsFor } from './stats.js';
-import { createGrid, densityFor } from './grid.js';
+import { createGrid } from './grid.js';
 import {
-  todayKey, addDays, rangeStart, rangeLabel, RANGES, longDate, shortDate,
+  todayKey, addDays, addMonths, rangeStart, rangeLabel, RANGES, longDate, shortDate,
   weekdayLetter, dayOf, monthOf, yearOf, daysInMonth, weekdayIndex,
   MONTHS_LONG, WEEKDAY_LETTERS, diffDays,
 } from './dates.js';
@@ -40,7 +40,38 @@ export const SWATCHES = [
   '#3FA9A0', '#7CA05A', '#A0A052', '#A9A29A',
 ];
 
+export const THEMES = [
+  { id: 'ledger',   label: 'Ledger',     mode: 'dark' },
+  { id: 'black',    label: 'True black', mode: 'dark' },
+  { id: 'slate',    label: 'Slate',      mode: 'dark' },
+  { id: 'midnight', label: 'Midnight',   mode: 'dark' },
+  { id: 'paper',    label: 'Paper',      mode: 'light' },
+  { id: 'daylight', label: 'Daylight',   mode: 'light' },
+];
+export const DEFAULT_THEME = 'ledger';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Black or white, whichever reads better on the given colour. Used for text
+ *  sitting on an accent button or on a filled cell, so a custom colour cannot
+ *  produce an unreadable label. */
+export function inkOn(color) {
+  const hex = String(color || '').trim();
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return '#14120F';
+  const n = parseInt(m[1], 16);
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return (L + 0.05) / 0.05 >= 1.05 / (L + 0.05) ? '#14120F' : '#FFFFFF';
+}
+
+/** Inline style for anything tinted by one habit. */
+export function habitStyle(hb) {
+  return '--habit:' + hb.color + ';--on-fill:' + inkOn(hb.color);
+}
 
 // -- tiny DOM helpers --------------------------------------------------------
 
@@ -358,7 +389,7 @@ function openZoom(hb, from, to, unit, onTick) {
     sheet.appendChild(h('p', { text: 'Tap a day to tick it.' }));
 
     const weekStart = state.settings().weekStart;
-    const wrap = h('div', { class: 'zoom-grid', style: '--habit:' + hb.color });
+    const wrap = h('div', { class: 'zoom-grid', style: habitStyle(hb) });
     for (let i = 0; i < 7; i++) {
       wrap.appendChild(h('span', { class: 'wd', text: WEEKDAY_LETTERS[(i + weekStart) % 7] }));
     }
@@ -511,7 +542,7 @@ export function home() {
 
 function habitCard(hb, onTick) {
   const card = h('article', {
-    class: 'card', style: '--habit:' + hb.color, dataset: { id: hb.id },
+    class: 'card', style: habitStyle(hb), dataset: { id: hb.id },
   });
   const streak = streakLine(hb);
   const tick = tickButton(hb, onTick);
@@ -612,12 +643,25 @@ function exportNudge() {
   const age = diffDays(oldest.createdAt, todayKey());
   if (since !== null && since < 30) return null;
   if (since === null && age < 30) return null;
-  return h('div', { class: 'banner' },
+
+  // Dismissing buys a week of quiet. A nag you cannot close is just noise.
+  const snoozed = state.settings().nudgeSnoozedAt;
+  if (snoozed && diffDays(snoozed, todayKey()) < 7) return null;
+
+  const banner = h('div', { class: 'banner' },
     icon('download'),
     h('span', { style: 'flex:1', text: since === null
       ? 'You have never exported a copy of this.'
       : 'Last export was ' + plural(since, 'day') + ' ago.' }),
-    h('button', { type: 'button', text: 'Export', onClick: () => go('#/settings') }));
+    h('button', { type: 'button', text: 'Export', onClick: () => go('#/settings') }),
+    h('button', {
+      type: 'button', class: 'close', 'aria-label': 'Dismiss for a week',
+      onClick: () => {
+        banner.remove();
+        state.setSettings({ nudgeSnoozedAt: todayKey() });
+      },
+    }, icon('close')));
+  return banner;
 }
 
 function bottomBar(active) {
@@ -676,7 +720,7 @@ export function week() {
   const painters = [];
 
   habits.forEach((hb) => {
-    const row = h('div', { class: 'week-row', style: '--habit:' + hb.color });
+    const row = h('div', { class: 'week-row', style: habitStyle(hb) });
     row.appendChild(h('button', {
       type: 'button', class: 'week-name', onClick: () => go('#/habit/' + hb.id),
     }, glyph(hb), h('span', { class: 'n', text: hb.name, title: hb.name })));
@@ -710,28 +754,38 @@ export function week() {
   return { el, update() { painters.forEach(p => p()); } };
 }
 
-// -- habit detail ------------------------------------------------------------
+// -- habit calendar ----------------------------------------------------------
+// Tapping a habit opens a month at a size you can actually hit with a thumb.
+// The contribution grid stays on the home card; the range that card uses is set
+// in the editor.
 
 export function detail(id) {
   const hb = state.habit(id);
   if (!hb) return notFound();
 
-  const el = h('div', { class: 'screen', style: '--habit:' + hb.color });
-  let range = hb.range;
+  const el = h('div', { class: 'screen', style: habitStyle(hb) });
+  const today = todayKey();
+  let cursor = today.slice(0, 7);          // the month on screen, YYYY-MM
+  let focusKey = today;                    // roving tabindex within the month
 
   el.appendChild(topbar(hb.name, {
     back: () => go('#/home'),
     sub: hb.target > 1 ? hb.target + ' ticks a day' : 'Once a day',
     actions: [h('button', {
-      type: 'button', class: 'iconbtn', 'aria-label': 'Edit habit',
+      type: 'button', class: 'iconbtn', 'aria-label': 'Habit settings',
       onClick: () => go('#/edit/' + hb.id),
-    }, icon('edit'))],
+    }, icon('gear'))],
   }));
 
-  const gridBox = h('div', { class: 'preview-wrap' });
-  let grid = null;
-
+  const cal = h('div', { class: 'cal' });
   const statsBox = h('div', { class: 'stats' });
+  const started = h('p', { class: 'help', style: 'margin-top:14px' });
+  el.appendChild(cal);
+  el.appendChild(statsBox);
+  el.appendChild(started);
+
+  const shiftMonth = (ym, n) => addMonths(ym + '-01', n).slice(0, 7);
+  const write = writeFor(hb);
 
   function paintStats() {
     const s = statsFor(hb.id);
@@ -747,71 +801,212 @@ export function detail(id) {
       statsBox.appendChild(tile(s.ticks, 'Total ticks'));
       statsBox.appendChild(tile(s.days, 'Days tracked'));
     }
+    started.textContent = 'Started ' + longDate(hb.createdAt) + '.';
   }
 
-  const unitNote = h('p', { class: 'help', style: 'margin-top:-6px' });
+  function buildCalendar() {
+    cal.textContent = '';
+    const year = Number(cursor.slice(0, 4));
+    const month = Number(cursor.slice(5, 7));
+    const first = cursor + '-01';
+    const length = daysInMonth(year, month);
+    const weekStart = state.settings().weekStart;
+    const atCurrentMonth = cursor === today.slice(0, 7);
 
-  function buildGrid() {
-    if (grid) grid.destroy();
-    gridBox.textContent = '';
-    grid = gridFor(hb, { range, onTick: () => { paintStats(); } });
-    gridBox.appendChild(grid.el);
-    gridBox.appendChild(legend(hb));
+    const prev = h('button', {
+      type: 'button', class: 'cal-nav', 'aria-label': 'Previous month',
+      onClick: () => { cursor = shiftMonth(cursor, -1); focusKey = null; buildCalendar(); },
+    }, icon('back'));
+    const next = h('button', {
+      type: 'button', class: 'cal-nav next', 'aria-label': 'Next month',
+      disabled: atCurrentMonth,
+      onClick: () => { cursor = shiftMonth(cursor, 1); focusKey = null; buildCalendar(); },
+    }, icon('back'));
 
-    const unit = densityFor(range, hb.createdAt, todayKey(), state.settings().density).unit;
-    unitNote.textContent = unit === 'day' ? ''
-      : 'At this range each cell is a ' + unit + '. Tap one to open it at day level.';
-    unitNote.style.display = unit === 'day' ? 'none' : '';
+    const head = h('div', { class: 'cal-head' }, prev,
+      h('div', { class: 'cal-title', text: MONTHS_LONG[month - 1] + ' ' + year }), next);
+    if (!atCurrentMonth) {
+      head.appendChild(h('button', {
+        type: 'button', class: 'cal-today', text: 'Today',
+        onClick: () => { cursor = today.slice(0, 7); focusKey = today; buildCalendar(); },
+      }));
+    }
+    cal.appendChild(head);
+
+    const wd = h('div', { class: 'cal-wd', 'aria-hidden': 'true' });
+    for (let i = 0; i < 7; i++) {
+      wd.appendChild(h('span', { text: WEEKDAY_LETTERS[(i + weekStart) % 7] }));
+    }
+    cal.appendChild(wd);
+
+    const grid = h('div', { class: 'cal-grid', role: 'group', 'aria-label': hb.name + ', ' + MONTHS_LONG[month - 1] + ' ' + year });
+    for (let i = 0, lead = weekdayIndex(first, weekStart); i < lead; i++) {
+      grid.appendChild(h('span', { class: 'cal-cell is-blank', 'aria-hidden': 'true' }));
+    }
+
+    if (!focusKey || focusKey.slice(0, 7) !== cursor) {
+      focusKey = atCurrentMonth ? today : first;
+    }
+
+    for (let d = 1; d <= length; d++) {
+      const k = cursor + '-' + String(d).padStart(2, '0');
+      grid.appendChild(dayCell(k, d));
+    }
+    cal.appendChild(grid);
+
+    const done = countDone(first, cursor + '-' + String(length).padStart(2, '0'));
+    const summary = h('div', { class: 'cal-month-total' },
+      h('span', { text: done.done + ' of ' + done.days + ' days' }));
+    if (hb.target > 1) summary.appendChild(legend(hb));
+    cal.appendChild(summary);
+
+    enableSwipe(grid);
   }
 
-  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Grid range' });
-  function centreChip() {
-    const active = chips.querySelector('.chip[aria-pressed="true"]');
-    if (active) chips.scrollLeft = active.offsetLeft - chips.clientWidth / 2 + active.offsetWidth / 2;
+  function countDone(from, to) {
+    let days = 0, done = 0;
+    for (let k = from; k <= to && k <= today; k = addDays(k, 1)) {
+      days++;
+      if (state.count(hb.id, k) >= hb.target) done++;
+    }
+    return { days, done };
   }
-  RANGES.forEach((r) => {
-    chips.appendChild(h('button', {
-      type: 'button', class: 'chip', 'aria-pressed': String(r.id === range),
-      text: r.label,
-      onClick: () => {
-        range = r.id;
-        state.updateHabit(hb.id, { range });
-        chips.querySelectorAll('.chip').forEach((c, i) => {
-          c.setAttribute('aria-pressed', String(RANGES[i].id === range));
-        });
-        buildGrid();
-        centreChip();
-      },
-    }));
-  });
 
-  el.appendChild(chips);
-  el.appendChild(h('div', { style: 'height:12px' }));
-  el.appendChild(gridBox);
-  el.appendChild(statsBox);
-  el.appendChild(unitNote);
-  setTimeout(centreChip, 0);
+  function dayCell(k, d) {
+    const future = k > today;
+    const cell = h(future ? 'span' : 'button', {
+      type: future ? null : 'button',
+      class: 'cal-cell',
+      dataset: { k },
+    });
+    const num = h('span', { class: 'd', text: String(d) });
+    const count = h('span', { class: 'c' });
+    cell.appendChild(num);
+    if (hb.target > 1) cell.appendChild(count);
 
-  el.appendChild(h('div', { class: 'section-title', text: 'Habit' }));
-  el.appendChild(h('div', { class: 'rows' },
-    h('button', { type: 'button', class: 'row', onClick: () => go('#/edit/' + hb.id) },
-      icon('edit'), 'Edit', h('span', { class: 'val', text: 'name, icon, colour, target' })),
-    h('button', {
-      type: 'button', class: 'row', style: 'color:var(--danger)',
-      onClick: () => confirmDelete(hb),
-    }, icon('trash'), 'Delete habit')));
+    const paint = () => {
+      const n = state.count(hb.id, k);
+      const level = Math.min(n / hb.target, 1);
+      cell.style.setProperty('--level', String(level));
+      cell.classList.toggle('is-empty', n === 0);
+      cell.classList.toggle('is-bright', level >= 0.55);
+      cell.classList.toggle('is-today', k === today);
+      cell.classList.toggle('is-future', future);
+      cell.classList.toggle('is-pre', !future && k < hb.createdAt && n === 0);
+      if (hb.target > 1) count.textContent = n > 0 ? n + '/' + hb.target : '';
+      if (!future) {
+        cell.setAttribute('aria-label', longDate(k) + ' — ' + tickLabel(hb, n));
+        cell.tabIndex = k === focusKey ? 0 : -1;
+      }
+    };
+    paint();
+    if (future) return cell;
 
-  el.appendChild(h('p', { class: 'help', style: 'margin-top:14px' },
-    'Started ' + longDate(hb.createdAt) + '.'));
+    // Registered before the click handler on purpose: at the target, listeners
+    // run in the order they were added, so the long-press guard has to be first
+    // if it is going to swallow the click it produced.
+    longPress(cell, () => openStepper(hb, k, cell, () => { refreshCells(); paintStats(); }));
+    cell.addEventListener('click', () => {
+      if (swipedAway) return;
+      const n = state.count(hb.id, k);
+      write(k, n >= hb.target ? 0 : n + 1);
+      focusKey = k;
+      refreshCells();
+      paintStats();
+    });
+    cell.addEventListener('keydown', onCellKey);
+    cell.repaint = paint;
+    return cell;
+  }
 
-  buildGrid();
+  function refreshCells() {
+    cal.querySelectorAll('.cal-cell').forEach((c) => { if (c.repaint) c.repaint(); });
+    const first = cursor + '-01';
+    const length = daysInMonth(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)));
+    const done = countDone(first, cursor + '-' + String(length).padStart(2, '0'));
+    const total = cal.querySelector('.cal-month-total span');
+    if (total) total.textContent = done.done + ' of ' + done.days + ' days';
+  }
+
+  function onCellKey(e) {
+    const k = e.currentTarget.dataset.k;
+    let next = null;
+    switch (e.key) {
+      case 'ArrowLeft': next = addDays(k, -1); break;
+      case 'ArrowRight': next = addDays(k, 1); break;
+      case 'ArrowUp': next = addDays(k, -7); break;
+      case 'ArrowDown': next = addDays(k, 7); break;
+      default: return;
+    }
+    if (next > today) return;
+    e.preventDefault();
+    focusKey = next;
+    if (next.slice(0, 7) !== cursor) {
+      cursor = next.slice(0, 7);
+      buildCalendar();
+    } else {
+      cal.querySelectorAll('.cal-cell[tabindex="0"]').forEach(c => { c.tabIndex = -1; });
+    }
+    const node = cal.querySelector('.cal-cell[data-k="' + next + '"]');
+    if (node && node.tagName === 'BUTTON') { node.tabIndex = 0; node.focus(); }
+  }
+
+  // Swipe sideways to change month. A swipe that starts and ends on the same
+  // cell would otherwise fire a click and tick that day.
+  let swipedAway = false;
+  function enableSwipe(grid) {
+    let x0 = 0, y0 = 0, tracking = false;
+    grid.addEventListener('pointerdown', (e) => {
+      tracking = true; swipedAway = false; x0 = e.clientX; y0 = e.clientY;
+    });
+    grid.addEventListener('pointerup', (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - x0, dy = e.clientY - y0;
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      swipedAway = true;
+      if (dx > 0) { cursor = shiftMonth(cursor, -1); focusKey = null; buildCalendar(); }
+      else if (cursor !== today.slice(0, 7)) { cursor = shiftMonth(cursor, 1); focusKey = null; buildCalendar(); }
+      setTimeout(() => { swipedAway = false; }, 0);
+    });
+    grid.addEventListener('pointercancel', () => { tracking = false; });
+  }
+
+  buildCalendar();
   paintStats();
 
   return {
     el,
-    update() { if (grid) grid.refresh(); paintStats(); },
-    destroy() { if (grid) grid.destroy(); },
+    update() { refreshCells(); paintStats(); },
   };
+}
+
+/** Shared long-press-to-open-a-stepper wiring. */
+function longPress(node, fire) {
+  let timer = 0, at = null, fired = false;
+  const cancel = () => { clearTimeout(timer); at = null; };
+  node.addEventListener('pointerdown', (e) => {
+    at = { x: e.clientX, y: e.clientY };
+    fired = false;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      fired = true;
+      at = null;
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) { /* optional */ } }
+      fire();
+    }, 450);
+  });
+  node.addEventListener('pointermove', (e) => {
+    if (!at) return;
+    if (Math.abs(e.clientX - at.x) > 8 || Math.abs(e.clientY - at.y) > 8) cancel();
+  });
+  node.addEventListener('pointerup', cancel);
+  node.addEventListener('pointercancel', cancel);
+  node.addEventListener('pointerleave', cancel);
+  node.addEventListener('click', (e) => {
+    if (fired) { fired = false; e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+  node.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
 function legend(hb) {
@@ -889,6 +1084,7 @@ export function editor(id) {
   function paintPreview() {
     if (previewGrid) previewGrid.destroy();
     preview.style.setProperty('--habit', draft.color);
+    preview.style.setProperty('--on-fill', inkOn(draft.color));
     preview.textContent = '';
     const fake = { id: '_preview', name: draft.name || 'Untitled', icon: draft.icon, color: draft.color, target: draft.target };
     preview.appendChild(h('div', { class: 'card-head' },
@@ -970,15 +1166,21 @@ export function editor(id) {
       ? draft.icon.value
       : (draft.name || 'H').slice(0, 1).toUpperCase();
     const input = h('input', {
-      class: 'input', type: 'text', maxLength: 1, value,
+      class: 'input', type: 'text', value,
       style: 'text-align:center;font-family:var(--font-display);font-size:26px',
       'aria-label': 'Letter',
+      autocapitalize: 'characters',
+      // Take the last character typed, not the first: with maxLength the field
+      // fills up and every further keypress is silently dropped, so the default
+      // letter could never be swapped without clearing the box first.
       onInput: (e) => {
-        const v = (e.target.value || 'H').slice(0, 1).toUpperCase();
+        const typed = e.target.value || '';
+        const v = (Array.from(typed).pop() || 'H').toUpperCase();
         e.target.value = v;
         draft.icon = { type: 'letter', value: v };
         paintPreview();
       },
+      onFocus: (e) => e.target.select(),
     });
     picker.appendChild(input);
     picker.appendChild(h('p', { class: 'help', text: 'Set in the display face, in the habit colour.' }));
@@ -1128,14 +1330,37 @@ export function settings() {
     h('label', { class: 'label', for: 's-name', text: 'Name' }), nameInput,
     h('p', { class: 'help', text: 'Stored on this device only. It appears on the home screen and in export filenames.' })));
 
-  el.appendChild(h('div', { class: 'section-title', text: 'Display' }));
+  el.appendChild(h('div', { class: 'section-title', text: 'Appearance' }));
+
+  const themeOptions = THEMES.map(t => ({ value: t.id, label: t.label + (t.mode === 'light' ? ' · light' : '') }));
+  themeOptions.push({ value: 'auto', label: 'Auto · match system' });
+
+  const appearance = h('div', { class: 'rows' },
+    selectRow('Theme', s.theme, themeOptions, (v) => {
+      state.setSettings({ theme: v });
+      applyTheme();
+      rerender();
+    }));
+
+  if (s.theme === 'auto') {
+    appearance.appendChild(selectRow('When dark', s.autoDark,
+      THEMES.filter(t => t.mode === 'dark').map(t => ({ value: t.id, label: t.label })),
+      (v) => { state.setSettings({ autoDark: v }); applyTheme(); }));
+    appearance.appendChild(selectRow('When light', s.autoLight,
+      THEMES.filter(t => t.mode === 'light').map(t => ({ value: t.id, label: t.label })),
+      (v) => { state.setSettings({ autoLight: v }); applyTheme(); }));
+  }
+  appearance.appendChild(accentRow());
+  el.appendChild(appearance);
+  el.appendChild(h('p', { class: 'help', text: s.theme === 'auto'
+    ? 'Auto follows your phone between the two themes above. The accent colour applies to whichever is showing.'
+    : 'The accent colours buttons, the focus ring and the marker on today. Each theme has its own; set one here to override them all.' }));
+
+  el.appendChild(h('div', { class: 'section-title', text: 'Grid' }));
   el.appendChild(h('div', { class: 'rows' },
     selectRow('Week starts on', s.weekStart, [
       { value: '1', label: 'Monday' }, { value: '0', label: 'Sunday' },
     ], (v) => { state.setSettings({ weekStart: Number(v) }); rerender(); }),
-    selectRow('Theme', s.theme, [
-      { value: 'dark', label: 'Ledger' }, { value: 'black', label: 'True black' },
-    ], (v) => { state.setSettings({ theme: v }); applyTheme(); }),
     selectRow('Default range', s.defaultRange, RANGES.map(r => ({ value: r.id, label: r.label })),
       (v) => state.setSettings({ defaultRange: v })),
     selectRow('Cell unit', s.density, [
@@ -1144,7 +1369,7 @@ export function settings() {
       { value: 'week', label: 'Always weeks' },
       { value: 'month', label: 'Always months' },
     ], (v) => { state.setSettings({ density: v }); rerender(); })));
-  el.appendChild(h('p', { class: 'help', text: 'Automatic picks the cell unit that fits each range — days up to two years, then weeks, then months.' }));
+  el.appendChild(h('p', { class: 'help', text: 'Automatic picks the cell unit that fits each range — days up to two years, then weeks, then months. A habit’s own range is set when you edit it.' }));
 
   // -- data
   el.appendChild(h('div', { class: 'section-title', text: 'Your data' }));
@@ -1295,6 +1520,32 @@ export function settings() {
   return { el, update() {} };
 }
 
+function accentRow() {
+  const custom = state.settings().accent;
+  const swatch = h('input', {
+    type: 'color', class: 'accent-swatch', 'aria-label': 'Accent colour',
+    value: custom || themeAccent(),
+    onInput: (e) => {
+      state.setSettings({ accent: e.target.value });
+      applyTheme();
+      reset.disabled = false;
+    },
+  });
+  const reset = h('button', {
+    type: 'button', class: 'accent-reset', text: 'Reset',
+    disabled: !custom,
+    onClick: () => {
+      state.setSettings({ accent: null });
+      applyTheme();
+      swatch.value = themeAccent();
+      reset.disabled = true;
+    },
+  });
+  return h('div', { class: 'row' },
+    h('span', { text: 'Accent colour' }),
+    h('div', { class: 'accent-row' }, swatch, reset));
+}
+
 function selectRow(label, value, options, onChange) {
   const sel = h('select', { 'aria-label': label, onChange: (e) => onChange(e.target.value) });
   options.forEach(o => sel.appendChild(h('option', {
@@ -1303,10 +1554,43 @@ function selectRow(label, value, options, onChange) {
   return h('div', { class: 'row' }, h('span', { text: label }), sel);
 }
 
+/** Which theme is actually on screen — resolves 'auto' against the OS. */
+export function resolvedTheme() {
+  const s = state.settings();
+  if (s.theme === 'auto') {
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return dark ? (s.autoDark || 'ledger') : (s.autoLight || 'paper');
+  }
+  return THEMES.some(t => t.id === s.theme) ? s.theme : DEFAULT_THEME;
+}
+
 export function applyTheme() {
-  document.documentElement.setAttribute('data-theme', state.settings().theme || 'dark');
+  const root = document.documentElement;
+  const settings = state.settings();
+  root.setAttribute('data-theme', resolvedTheme());
+
+  // One accent, applied over whichever theme is active. Clearing it falls back
+  // to that theme's own colour, which is why this reads the computed value
+  // rather than keeping a second copy of the palette in JS.
+  if (settings.accent) root.style.setProperty('--accent', settings.accent);
+  else root.style.removeProperty('--accent');
+
+  const computed = getComputedStyle(root);
+  const accent = computed.getPropertyValue('--accent').trim() || '#C6A15B';
+  root.style.setProperty('--on-accent', inkOn(accent));
+
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', state.settings().theme === 'black' ? '#000000' : '#131210');
+  if (meta) meta.setAttribute('content', computed.getPropertyValue('--ink-900').trim() || '#131210');
+}
+
+/** The accent this theme would use with no override — for the reset swatch. */
+export function themeAccent() {
+  const root = document.documentElement;
+  const had = root.style.getPropertyValue('--accent');
+  root.style.removeProperty('--accent');
+  const base = getComputedStyle(root).getPropertyValue('--accent').trim() || '#C6A15B';
+  if (had) root.style.setProperty('--accent', had);
+  return base;
 }
 
 let rerenderHook = () => {};

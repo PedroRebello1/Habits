@@ -79,6 +79,14 @@ storage.onExternalChange((next) => {
   views.toast('Updated from another tab.');
 });
 
+// Auto theme follows the OS, including a change while the app is open.
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const onSchemeChange = () => {
+  if (state.settings().theme === 'auto') { views.applyTheme(); render(); }
+};
+if (darkQuery.addEventListener) darkQuery.addEventListener('change', onSchemeChange);
+else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
+
 // A tab left open overnight must not tick yesterday.
 function checkRollover() {
   const now = todayKey();

@@ -91,23 +91,59 @@ exact and means the 53rd-week drift never opens a gap or double-counts a day.
 does not quietly lie when you record history you already had. Those days render as ghost
 outlines until you fill them.
 
+**Column positions are precomputed rather than derived from the pitch.** Once months are set
+slightly apart, `x` is no longer `i * pitch`, so the virtualizer binary-searches an array of
+positions to find the visible window. Still no DOM measurement, still exact.
+
+**Every theme defines the same tokens**, so nothing outside the palette block knows which one is
+active. `--on-accent` and `--on-fill` — the ink on a coloured button or a filled cell — are
+computed in JS from the applied colour by relative luminance, which is what keeps a custom accent
+or an unusual habit colour legible.
+
 ## What it does
 
 - Multiple habits, each with its own contribution grid, colour, icon and daily target
 - Targets above 1 fill the cell in steps; a day only counts toward a streak at the full target
 - Per-habit range from one week to all time, with the cell unit changing to suit — days, then
-  weeks, then months. Ten years fits on one screen
-- Tap to tick, tap a full cell to clear it, long-press for an exact stepper
+  weeks, then months. Ten years fits on one screen. Months are set a hair apart so you can read
+  the boundaries; years get a hairline rule
+- Tap a habit for a **month calendar** with 46px targets — the comfortable way to fix a day you
+  forgot. Its stats sit underneath; swipe or use the arrows to move between months
+- Tap the grid on the home card too, if you can hit it. Tap a full cell to clear it, long-press
+  anywhere for an exact stepper
 - Week view for "I forgot to tick Tuesday"
 - Aggregate cells cannot be ticked; tapping one opens that week or month at day level
-- Full keyboard grid navigation, real `aria-label`s on every cell, reduced-motion support
+- **Six themes** — Ledger, True black, Slate and Midnight in the dark, Paper and Daylight in the
+  light — plus Auto, which follows your phone and lets you choose which two it pairs
+- **One accent colour** you can override for the whole app, and reset back to the theme's own.
+  The label colour on buttons and filled cells is computed from whatever you pick, so a custom
+  colour cannot make text unreadable
+- Full keyboard navigation in both the grid and the calendar, real `aria-label`s on every cell,
+  reduced-motion support
 - Export / import JSON, with merge or replace, validation, and a recoverable backup
 - Delete gets a confirmation naming the habit and a ten-second undo
+
+## Screens
+
+**Home** — a card per habit: icon, name, streak, today's tick button, then the grid at that
+habit's range. Long-press and drag to reorder. Bottom bar switches to the week view.
+
+**Calendar** — tap a habit. One month at a readable size, day numbers, `n/target` on multi-tick
+days, today ringed, the Less–More scale when the target is above one, then the stats block and
+the date you started. The gear at the top right opens the editor.
+
+**Editor** — name, icon (36 line icons, emoji or a letter), colour, daily target, grid range, and
+delete. A live preview at the top renders the real grid at the range you picked.
+
+**Settings** — name, theme, auto pairing, accent, week start, default range, cell unit, export,
+import, backup restore, delete everything.
 
 ## Tested
 
 Driven through headless Chrome at 390 × 844 with touch emulation: onboarding, habit
-creation, ticking, all nine ranges and three cell units, virtualization, keyboard
-navigation, long-press, delete with undo, import merge and replace, backup restore,
-cross-tab sync, quota failure, and an offline reload with the network cut. Streak and
-date maths have unit tests, including DST boundaries and target re-scoring.
+creation, ticking, all nine ranges and three cell units, virtualization, month-gap spacing
+measured to the pixel, calendar navigation and keyboard walking across month boundaries,
+long-press, delete with undo, import merge and replace, backup restore, cross-tab sync,
+quota failure, all six themes plus Auto against an emulated OS setting, accent override and
+reset, and an offline reload with the network cut. Streak and date maths have unit tests,
+including DST boundaries and target re-scoring.
