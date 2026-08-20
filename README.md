@@ -58,6 +58,7 @@ Export from Settings now and then. The home screen nags after 30 days without on
 index.html            app shell + the inlined SVG sprite (36 habit icons, 12 UI glyphs)
 styles.css            tokens, layout, grid, sheets
 js/dates.js           local YYYY-MM-DD maths — the only date model in the app
+js/i18n.js            English and pt-BR strings, plus locale date formatting
 js/storage.js         localStorage, debounced writes, quota handling, cross-tab events
 js/state.js           in-memory store, subscribe/notify, undo snapshots
 js/stats.js           streaks, totals, rates — memoised per habit
@@ -100,6 +101,10 @@ active. `--on-accent` and `--on-fill` — the ink on a coloured button or a fill
 computed in JS from the applied colour by relative luminance, which is what keeps a custom accent
 or an unusual habit colour legible.
 
+**`dates.js` knows no language.** It does arithmetic on `YYYY-MM-DD` strings and nothing else;
+month names, weekday letters and the shape of a written date live in `i18n.js`. That is why
+adding a language touches one file, and why the date maths has never needed a locale.
+
 ## What it does
 
 - Multiple habits, each with its own contribution grid, colour, icon and daily target
@@ -118,6 +123,9 @@ or an unusual habit colour legible.
 - **One accent colour** you can override for the whole app, and reset back to the theme's own.
   The label colour on buttons and filled cells is computed from whatever you pick, so a custom
   colour cannot make text unreadable
+- **English and Brazilian Portuguese**, switchable in Settings. First run follows the browser,
+  so a phone set to pt-BR opens in Portuguese. Month names, weekday letters and date order all
+  change with it — "19 de agosto", "Agosto de 2026", "S T Q Q S S D"
 - Full keyboard navigation in both the grid and the calendar, real `aria-label`s on every cell,
   reduced-motion support
 - Export / import JSON, with merge or replace, validation, and a recoverable backup
@@ -132,6 +140,11 @@ habit's range. Long-press and drag to reorder. Bottom bar switches to the week v
 days, today ringed, the Less–More scale when the target is above one, then the stats block and
 the date you started. The gear at the top right opens the editor.
 
+The stats are: current streak, longest streak, days completed, lifetime completion rate, **days
+since the last tick**, the **trailing 30-day rate**, and — once there are at least fourteen
+completed days — the **weekday you actually keep**, measured against how often that weekday has
+come round. Multi-tick habits also get total ticks and days tracked.
+
 **Editor** — name, icon (36 line icons, emoji or a letter), colour, daily target, grid range, and
 delete. A live preview at the top renders the real grid at the range you picked.
 
@@ -145,5 +158,7 @@ creation, ticking, all nine ranges and three cell units, virtualization, month-g
 measured to the pixel, calendar navigation and keyboard walking across month boundaries,
 long-press, delete with undo, import merge and replace, backup restore, cross-tab sync,
 quota failure, all six themes plus Auto against an emulated OS setting, accent override and
-reset, and an offline reload with the network cut. Streak and date maths have unit tests,
-including DST boundaries and target re-scoring.
+reset, both languages across every screen, an import that switches language, theme and accent
+at once, and an offline reload with the network cut. Date, streak and translation logic have
+unit tests — 63 of them — covering DST boundaries, target re-scoring, and a check that every
+English string has a Portuguese counterpart.

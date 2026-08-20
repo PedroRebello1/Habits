@@ -5,6 +5,8 @@
 // mode) is surfaced through onError rather than swallowed: a tick must never
 // disappear quietly.
 
+import { t } from './i18n.js';
+
 export const KEY = 'habitgrid.v1';
 export const BACKUP_KEY = 'habitgrid.backup';
 export const SCHEMA = 1;
@@ -23,6 +25,7 @@ export function defaultState() {
     onboarded: false,
     username: '',
     settings: {
+      lang: null,            // null = follow the browser until the user picks
       weekStart: 1,
       theme: 'ledger',
       accent: null,          // null = use the theme's own accent
@@ -51,7 +54,7 @@ export function read() {
   try {
     return normalise(JSON.parse(raw));
   } catch (err) {
-    emit('error', new Error('Stored data could not be parsed. It has been left untouched.'));
+    emit('error', new Error(t('err.parse')));
     return null;
   }
 }
@@ -71,6 +74,7 @@ export function normalise(data) {
   // v1 shipped with two themes named dark/black; dark became "ledger" when the
   // palette grew.
   if (out.settings.theme === 'dark') out.settings.theme = 'ledger';
+  if (out.settings.lang !== 'en' && out.settings.lang !== 'pt-BR') out.settings.lang = null;
   if (typeof out.settings.accent !== 'string' || !/^#[0-9a-f]{6}$/i.test(out.settings.accent)) {
     out.settings.accent = null;
   }
@@ -78,6 +82,8 @@ export function normalise(data) {
     if (typeof h.order !== 'number') h.order = i;
     if (!h.icon || typeof h.icon !== 'object') h.icon = { type: 'letter', value: (h.name || '?')[0] };
     if (typeof h.target !== 'number' || h.target < 1) h.target = 1;
+    // The colour lands in a style attribute, so it never gets there unchecked.
+    if (typeof h.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(h.color)) h.color = '#C6A15B';
     if (!out.entries[h.id]) out.entries[h.id] = {};
   });
   return out;
@@ -148,12 +154,12 @@ export function usage() {
 export function describeError(err) {
   const name = err && err.name;
   if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-    return 'Storage is full — that change was not saved. Export your data, then delete a habit to free space.';
+    return t('err.quota');
   }
   if (name === 'SecurityError') {
-    return 'This browser is blocking local storage (private mode?). Nothing can be saved.';
+    return t('err.security');
   }
-  return (err && err.message) || 'Could not save to this device.';
+  return (err && err.message) || t('err.generic');
 }
 
 // Another tab wrote: reload rather than clobber.

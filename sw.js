@@ -5,7 +5,7 @@
 // network fallback that repopulates the cache for anything missed. Navigations
 // fall back to the cached index.html so a deep link works offline.
 
-const VERSION = 'habitgrid-v2';
+const VERSION = 'habitgrid-v3';
 const SHELL = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const SHELL = [
   './js/state.js',
   './js/storage.js',
   './js/dates.js',
+  './js/i18n.js',
   './js/grid.js',
   './js/stats.js',
   './js/views.js',

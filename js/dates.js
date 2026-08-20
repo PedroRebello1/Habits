@@ -1,4 +1,5 @@
-// dates.js — calendar maths on local YYYY-MM-DD strings.
+// dates.js — calendar maths on local YYYY-MM-DD strings. No language here:
+// month and weekday names, and how a date is written out, live in i18n.js.
 //
 // Rule of the house: never toISOString(). It converts to UTC and silently
 // records the wrong day for anyone west of Greenwich in the evening. Every key
@@ -73,47 +74,22 @@ export function startOfWeek(key, weekStart) {
   return addDays(key, -weekdayIndex(key, weekStart));
 }
 
-export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-  'August', 'September', 'October', 'November', 'December'];
-export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-export const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-/** "19 August" / "19 August 2024" when the year differs from today's. */
-export function longDate(key) {
-  const y = yearOf(key);
-  const s = `${dayOf(key)} ${MONTHS_LONG[monthOf(key) - 1]}`;
-  return y === new Date().getFullYear() ? s : `${s} ${y}`;
-}
-
-export function shortDate(key) {
-  return `${dayOf(key)} ${MONTHS[monthOf(key) - 1]}`;
-}
-
-export function weekdayLetter(key) {
-  return WEEKDAY_LETTERS[parseKey(key).getDay()];
-}
-
-export function weekdayName(key) {
-  return WEEKDAYS[parseKey(key).getDay()];
-}
-
 // ── Ranges ──────────────────────────────────────────────────────────────────
 
+// Labels live in i18n.js; this file stays pure arithmetic.
 export const RANGES = [
-  { id: '1w',  label: '1 week',    short: '1W',  days: 7 },
-  { id: '1m',  label: '1 month',   short: '1M',  months: 1 },
-  { id: '3m',  label: '3 months',  short: '3M',  months: 3 },
-  { id: '6m',  label: '6 months',  short: '6M',  months: 6 },
-  { id: '1y',  label: '1 year',    short: '1Y',  months: 12 },
-  { id: '2y',  label: '2 years',   short: '2Y',  months: 24 },
-  { id: '5y',  label: '5 years',   short: '5Y',  months: 60 },
-  { id: '10y', label: '10 years',  short: '10Y', months: 120 },
-  { id: 'all', label: 'All time',  short: 'ALL' },
+  { id: '1w',  days: 7 },
+  { id: '1m',  months: 1 },
+  { id: '3m',  months: 3 },
+  { id: '6m',  months: 6 },
+  { id: '1y',  months: 12 },
+  { id: '2y',  months: 24 },
+  { id: '5y',  months: 60 },
+  { id: '10y', months: 120 },
+  { id: 'all' },
 ];
 
 export const RANGE_IDS = RANGES.map(r => r.id);
-export function rangeLabel(id) { return (RANGES.find(r => r.id === id) || RANGES[4]).label; }
 
 /** First day shown for a range, inclusive. */
 export function rangeStart(rangeId, createdAt, today = todayKey()) {

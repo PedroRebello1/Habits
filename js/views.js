@@ -10,10 +10,13 @@ import * as io from './io.js';
 import { statsFor } from './stats.js';
 import { createGrid } from './grid.js';
 import {
-  todayKey, addDays, addMonths, rangeStart, rangeLabel, RANGES, longDate, shortDate,
-  weekdayLetter, dayOf, monthOf, yearOf, daysInMonth, weekdayIndex,
-  MONTHS_LONG, WEEKDAY_LETTERS, diffDays,
+  todayKey, addDays, addMonths, rangeStart, RANGES,
+  dayOf, monthOf, yearOf, daysInMonth, weekdayIndex, diffDays,
 } from './dates.js';
+import {
+  t, plural, setLang, detectLang, LANGUAGES, rangeLabel, themeLabel,
+  longDate, shortDate, monthYear, weekdayLetter, weekdayLetters, weekdayName,
+} from './i18n.js';
 
 export const ICON_GROUPS = [
   { name: 'Movement',   icons: ['run', 'walk', 'bike', 'swim', 'dumbbell', 'stretch'] },
@@ -125,7 +128,6 @@ export function glyph(hb, big) {
 }
 
 const pct = (n) => Math.round(n * 100) + '%';
-const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
 
 // -- toasts ------------------------------------------------------------------
 
@@ -144,7 +146,7 @@ export function toast(message, opts) {
     }));
   }
   el.appendChild(h('button', {
-    type: 'button', class: 'faint', 'aria-label': 'Dismiss', onClick: close,
+    type: 'button', class: 'faint', 'aria-label': t('common.dismiss'), onClick: close,
   }, icon('close')));
   toastRoot().appendChild(el);
   timer = setTimeout(close, o.timeout || (o.error ? 7000 : 4000));
@@ -229,8 +231,8 @@ function openPopover(anchor, build) {
 function stepper(value, min, max, onChange, label) {
   const val = h('span', { class: 'val', text: String(value) });
   let n = value;
-  const dec = h('button', { type: 'button', 'aria-label': 'Decrease ' + (label || 'value') }, icon('minus'));
-  const inc = h('button', { type: 'button', 'aria-label': 'Increase ' + (label || 'value') }, icon('plus'));
+  const dec = h('button', { type: 'button', 'aria-label': t('edit.decrease', { label: label || '' }) }, icon('minus'));
+  const inc = h('button', { type: 'button', 'aria-label': t('edit.increase', { label: label || '' }) }, icon('plus'));
   const sync = () => {
     val.textContent = String(n);
     dec.disabled = n <= min;
@@ -270,7 +272,7 @@ function topbar(title, opts) {
   const bar = h('header', { class: 'topbar' });
   if (o.back) {
     bar.appendChild(h('button', {
-      type: 'button', class: 'iconbtn', 'aria-label': 'Back',
+      type: 'button', class: 'iconbtn', 'aria-label': t('common.back'),
       onClick: () => { if (typeof o.back === 'function') o.back(); else history.back(); },
     }, icon('back')));
   }
@@ -285,8 +287,8 @@ function topbar(title, opts) {
 function go(hash) { location.hash = hash; }
 
 function tickLabel(hb, count) {
-  if (hb.target > 1) return count + '/' + hb.target;
-  return count > 0 ? 'done' : 'not done';
+  if (hb.target > 1) return t('common.ofDone', { n: count, t: hb.target });
+  return t(count > 0 ? 'common.done' : 'common.notDone');
 }
 
 function tickButton(hb, onTick) {
@@ -298,7 +300,7 @@ function tickButton(hb, onTick) {
     btn.classList.toggle('is-part', n > 0 && n < hb.target);
     if (hb.target > 1) btn.appendChild(document.createTextNode(n + '/' + hb.target));
     else btn.appendChild(icon('check'));
-    btn.setAttribute('aria-label', 'Today, ' + hb.name + ' — ' + tickLabel(hb, n) + '. Tap to tick.');
+    btn.setAttribute('aria-label', t('home.todayAria', { name: hb.name, status: tickLabel(hb, n) }));
   };
   btn.addEventListener('click', () => {
     state.cycle(hb.id, todayKey());
@@ -318,14 +320,15 @@ function streakLine(hb) {
     if (s.current > 0) {
       line.appendChild(icon('flame', ''));
       line.appendChild(h('span', { class: 'n', text: String(s.current) }));
-      line.appendChild(document.createTextNode(s.current === 1 ? ' day' : ' days'));
+      line.appendChild(document.createTextNode(' ' + t(s.current === 1 ? 'stat.unit.day' : 'stat.unit.days')));
     } else if (s.completions > 0) {
-      line.appendChild(document.createTextNode('No streak · ' + plural(s.completions, 'day') + ' total'));
+      line.appendChild(document.createTextNode(
+        t('home.noStreak', { total: plural(s.completions, 'n.day') })));
     } else {
-      line.appendChild(document.createTextNode('Not started'));
+      line.appendChild(document.createTextNode(t('home.notStarted')));
     }
     if (hb.target > 1) {
-      line.appendChild(document.createTextNode(' · ' + hb.target + '× daily'));
+      line.appendChild(document.createTextNode(' · ' + t('home.perDay', { n: hb.target })));
     }
   };
   paint();
@@ -373,7 +376,7 @@ function openStepper(hb, dateKey, anchor, onTick) {
     const box = stepper(state.count(hb.id, dateKey), 0, 99, (n) => {
       writeFor(hb)(dateKey, n);
       if (onTick) onTick();
-    }, 'count for ' + longDate(dateKey));
+    }, t('edit.countFor', { date: longDate(dateKey) }));
     pop.appendChild(box);
   });
 }
@@ -382,16 +385,14 @@ function openStepper(hb, dateKey, anchor, onTick) {
  *  the period at day density instead. */
 function openZoom(hb, from, to, unit, onTick) {
   openSheet((sheet, close) => {
-    const title = unit === 'month'
-      ? MONTHS_LONG[monthOf(from) - 1] + ' ' + yearOf(from)
-      : 'Week of ' + longDate(from);
+    const title = unit === 'month' ? monthYear(from) : t('zoom.weekOf', { date: longDate(from) });
     sheet.appendChild(h('h3', { class: 'display', text: title }));
-    sheet.appendChild(h('p', { text: 'Tap a day to tick it.' }));
+    sheet.appendChild(h('p', { text: t('zoom.tapADay') }));
 
     const weekStart = state.settings().weekStart;
     const wrap = h('div', { class: 'zoom-grid', style: habitStyle(hb) });
     for (let i = 0; i < 7; i++) {
-      wrap.appendChild(h('span', { class: 'wd', text: WEEKDAY_LETTERS[(i + weekStart) % 7] }));
+      wrap.appendChild(h('span', { class: 'wd', text: weekdayLetters()[(i + weekStart) % 7] }));
     }
     const first = unit === 'month' ? from.slice(0, 8) + '01' : from;
     const last = unit === 'month'
@@ -411,8 +412,10 @@ function openZoom(hb, from, to, unit, onTick) {
       });
       const paint = () => {
         const n = state.count(hb.id, k);
-        cell.style.setProperty('--level', String(Math.min(n / hb.target, 1)));
+        const level = Math.min(n / hb.target, 1);
+        cell.style.setProperty('--level', String(level));
         cell.classList.toggle('is-empty', n === 0);
+        cell.classList.toggle('is-bright', level >= 0.55);
         cell.classList.toggle('is-today', k === today);
         if (!future) {
           cell.setAttribute('aria-label', longDate(k) + ' — ' + tickLabel(hb, n));
@@ -431,7 +434,7 @@ function openZoom(hb, from, to, unit, onTick) {
     }
     sheet.appendChild(wrap);
     sheet.appendChild(h('div', { class: 'hr' }));
-    sheet.appendChild(h('button', { type: 'button', class: 'btn', text: 'Done', onClick: close }));
+    sheet.appendChild(h('button', { type: 'button', class: 'btn', text: t('common.close'), onClick: close }));
   });
 }
 
@@ -441,7 +444,7 @@ export function onboarding() {
   const el = h('div', { class: 'onboard' });
   const input = h('input', {
     class: 'input', type: 'text', id: 'ob-name', autocomplete: 'nickname',
-    placeholder: 'Your name', maxLength: 32, value: state.get().username || '',
+    placeholder: t('onboard.namePlaceholder'), maxLength: 32, value: state.get().username || '',
   });
 
   const start = () => {
@@ -450,16 +453,12 @@ export function onboarding() {
   };
 
   el.appendChild(h('h1', {}, 'Habit', h('br'), 'Grid'));
-  el.appendChild(h('p', { class: 'lede' },
-    'A decade of small marks, and nothing else. No accounts, no reminders, no server.'));
+  el.appendChild(h('p', { class: 'lede', text: t('app.tagline') }));
 
   el.appendChild(h('div', { class: 'field' },
-    h('label', { class: 'label', for: 'ob-name', text: 'What should the app call you?' }),
+    h('label', { class: 'label', for: 'ob-name', text: t('onboard.question') }),
     input,
-    h('p', { class: 'help' },
-      'Everything you record lives in this browser on this device, and nowhere else. '
-      + 'There is no account to lose and no server to leak it. That also means it is '
-      + 'yours to look after: export a copy now and then.')));
+    h('p', { class: 'help', text: t('onboard.privacy') })));
 
   if (!isStandalone()) {
     const installRow = h('div', { class: 'field' });
@@ -468,21 +467,19 @@ export function onboarding() {
         if (canInstall()) {
           promptInstall().then(ok => { if (ok) installRow.remove(); });
         } else {
-          toast('Open your browser menu and choose "Add to Home screen".', { timeout: 6000 });
+          toast(t('onboard.installManual'), { timeout: 6000 });
         }
       },
-    }, icon('download'), 'Add to Home screen');
+    }, icon('download'), t('onboard.install'));
     installRow.appendChild(btn);
-    installRow.appendChild(h('p', { class: 'help' },
-      'Installing keeps the app offline and stops the browser clearing your data '
-      + 'after a spell without a visit. Worth the ten seconds.'));
+    installRow.appendChild(h('p', { class: 'help', text: t('onboard.installWhy') }));
     el.appendChild(installRow);
   }
 
   el.appendChild(h('div', { class: 'hr' }));
-  el.appendChild(h('button', { type: 'button', class: 'btn btn-primary', text: 'Start', onClick: start }));
-  el.appendChild(h('p', { class: 'help', style: 'text-align:center;margin-top:14px' },
-    'Already have an export? Start, then use Settings → Import.'));
+  el.appendChild(h('button', { type: 'button', class: 'btn btn-primary', text: t('onboard.start'), onClick: start }));
+  el.appendChild(h('p', { class: 'help', style: 'text-align:center;margin-top:14px',
+    text: t('onboard.hasExport') }));
 
   setTimeout(() => input.focus(), 40);
   return { el, update() {} };
@@ -494,10 +491,10 @@ export function home() {
   const el = h('div', { class: 'screen' });
   const cards = new Map();
 
-  el.appendChild(topbar('Habit Grid', {
-    sub: state.get().username ? 'Hello, ' + state.get().username : null,
+  el.appendChild(topbar(t('app.name'), {
+    sub: state.get().username ? t('home.greeting', { name: state.get().username }) : null,
     actions: [h('button', {
-      type: 'button', class: 'iconbtn', 'aria-label': 'Settings',
+      type: 'button', class: 'iconbtn', 'aria-label': t('common.settings'),
       onClick: () => go('#/settings'),
     }, icon('gear'))],
   }));
@@ -511,8 +508,8 @@ export function home() {
   const habits = state.habits();
   if (!habits.length) {
     list.appendChild(h('div', { class: 'empty' },
-      h('h2', { text: 'Nothing yet' }),
-      h('p', { text: 'Add a habit and start filling the grid. One square a day.' })));
+      h('h2', { text: t('home.empty') }),
+      h('p', { text: t('home.emptyBody') })));
   }
 
   habits.forEach((hb) => {
@@ -577,7 +574,7 @@ function habitCard(hb, onTick) {
 function enableReorder(list, cards) {
   let dragging = null, timer = 0, startY = 0, moved = false;
 
-  const cardOf = (t) => (t.closest ? t.closest('.card') : null);
+  const cardOf = (node) => (node.closest ? node.closest('.card') : null);
   const blockScroll = (e) => e.preventDefault();
 
   list.addEventListener('pointerdown', (e) => {
@@ -651,11 +648,11 @@ function exportNudge() {
   const banner = h('div', { class: 'banner' },
     icon('download'),
     h('span', { style: 'flex:1', text: since === null
-      ? 'You have never exported a copy of this.'
-      : 'Last export was ' + plural(since, 'day') + ' ago.' }),
-    h('button', { type: 'button', text: 'Export', onClick: () => go('#/settings') }),
+      ? t('nudge.never')
+      : t('nudge.stale', { ago: plural(since, 'n.day') }) }),
+    h('button', { type: 'button', text: t('nudge.action'), onClick: () => go('#/settings') }),
     h('button', {
-      type: 'button', class: 'close', 'aria-label': 'Dismiss for a week',
+      type: 'button', class: 'close', 'aria-label': t('nudge.dismiss'),
       onClick: () => {
         banner.remove();
         state.setSettings({ nudgeSnoozedAt: todayKey() });
@@ -665,18 +662,18 @@ function exportNudge() {
 }
 
 function bottomBar(active) {
-  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'View' },
+  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': t('home.view') },
     h('button', {
       type: 'button', 'aria-pressed': String(active === 'grid'),
       onClick: () => go('#/home'),
-    }, icon('grid'), 'Grid'),
+    }, icon('grid'), t('home.grid')),
     h('button', {
       type: 'button', 'aria-pressed': String(active === 'week'),
       onClick: () => go('#/week'),
-    }, icon('week'), 'Week'));
+    }, icon('week'), t('home.week')));
 
   const fab = h('button', {
-    type: 'button', class: 'fab', 'aria-label': 'Add a habit',
+    type: 'button', class: 'fab', 'aria-label': t('home.addHabit'),
     onClick: () => go('#/new'),
   }, icon('plus'));
 
@@ -692,10 +689,10 @@ export function week() {
   const days = [];
   for (let i = 6; i >= 0; i--) days.push(addDays(today, -i));
 
-  el.appendChild(topbar('Last 7 days', {
+  el.appendChild(topbar(t('week.title'), {
     sub: shortDate(days[0]) + ' – ' + shortDate(today),
     actions: [h('button', {
-      type: 'button', class: 'iconbtn', 'aria-label': 'Settings',
+      type: 'button', class: 'iconbtn', 'aria-label': t('common.settings'),
       onClick: () => go('#/settings'),
     }, icon('gear'))],
   }));
@@ -703,8 +700,8 @@ export function week() {
   const habits = state.habits();
   if (!habits.length) {
     el.appendChild(h('div', { class: 'empty' },
-      h('h2', { text: 'Nothing yet' }),
-      h('p', { text: 'Add a habit to see the week.' })));
+      h('h2', { text: t('home.empty') }),
+      h('p', { text: t('week.empty') })));
     el.appendChild(bottomBar('week'));
     return { el, update() {} };
   }
@@ -729,12 +726,15 @@ export function week() {
       const cell = h('button', { type: 'button', class: 'week-cell' });
       const paint = () => {
         const n = state.count(hb.id, k);
-        cell.style.setProperty('--level', String(Math.min(n / hb.target, 1)));
+        const level = Math.min(n / hb.target, 1);
+        cell.style.setProperty('--level', String(level));
         cell.classList.toggle('is-empty', n === 0);
+        cell.classList.toggle('is-bright', level >= 0.55);
         cell.classList.toggle('is-today', k === today);
         cell.textContent = n > 0 ? (hb.target > 1 ? String(n) : '') : '';
         if (n > 0 && hb.target === 1) cell.appendChild(icon('check', 'ico'));
-        cell.setAttribute('aria-label', hb.name + ', ' + longDate(k) + ' — ' + tickLabel(hb, n));
+        cell.setAttribute('aria-label',
+          t('week.cellAria', { name: hb.name, date: longDate(k), status: tickLabel(hb, n) }));
       };
       cell.addEventListener('click', () => {
         const n = state.count(hb.id, k);
@@ -770,9 +770,9 @@ export function detail(id) {
 
   el.appendChild(topbar(hb.name, {
     back: () => go('#/home'),
-    sub: hb.target > 1 ? hb.target + ' ticks a day' : 'Once a day',
+    sub: hb.target > 1 ? t('cal.ticksPerDay', { n: hb.target }) : t('cal.oncePerDay'),
     actions: [h('button', {
-      type: 'button', class: 'iconbtn', 'aria-label': 'Habit settings',
+      type: 'button', class: 'iconbtn', 'aria-label': t('cal.settings'),
       onClick: () => go('#/edit/' + hb.id),
     }, icon('gear'))],
   }));
@@ -790,21 +790,44 @@ export function detail(id) {
   function paintStats() {
     const s = statsFor(hb.id);
     statsBox.textContent = '';
-    const tile = (v, k, small) => h('div', { class: 'stat' },
-      h('div', { class: 'v' }, String(v), small ? h('small', { text: ' ' + small }) : null),
+    const tile = (v, k, small, wide) => h('div', { class: 'stat' },
+      h('div', { class: 'v' + (wide ? ' word' : '') }, String(v),
+        small ? h('small', { text: ' ' + small }) : null),
       h('div', { class: 'k', text: k }));
-    statsBox.appendChild(tile(s.current, 'Current streak', s.current === 1 ? 'day' : 'days'));
-    statsBox.appendChild(tile(s.longest, 'Longest streak', s.longest === 1 ? 'day' : 'days'));
-    statsBox.appendChild(tile(s.completions, 'Days completed'));
-    statsBox.appendChild(tile(pct(s.rate), 'Completion rate'));
-    if (hb.target > 1) {
-      statsBox.appendChild(tile(s.ticks, 'Total ticks'));
-      statsBox.appendChild(tile(s.days, 'Days tracked'));
+    const dayWord = (n) => t(n === 1 ? 'stat.unit.day' : 'stat.unit.days');
+
+    statsBox.appendChild(tile(s.current, t('stat.current'), dayWord(s.current)));
+    statsBox.appendChild(tile(s.longest, t('stat.longest'), dayWord(s.longest)));
+    statsBox.appendChild(tile(s.completions, t('stat.completed')));
+    statsBox.appendChild(tile(pct(s.rate), t('stat.rate')));
+
+    // How long since anything at all was recorded — a plainer question than a
+    // streak, and the one you actually want after a bad week.
+    if (s.sinceTick === null) {
+      statsBox.appendChild(tile(t('stat.lastTickNever'), t('stat.lastTick'), null, true));
+    } else if (s.sinceTick === 0) {
+      statsBox.appendChild(tile(t('stat.lastTickToday'), t('stat.lastTick'), null, true));
+    } else {
+      statsBox.appendChild(tile(s.sinceTick, t('stat.lastTick'), dayWord(s.sinceTick)));
     }
-    started.textContent = 'Started ' + longDate(hb.createdAt) + '.';
+    statsBox.appendChild(tile(pct(s.recentRate), t('stat.recent', { n: s.recentDays })));
+
+    if (hb.target > 1) {
+      statsBox.appendChild(tile(s.ticks, t('stat.ticks')));
+      statsBox.appendChild(tile(s.days, t('stat.tracked')));
+    }
+    if (s.bestWeekday) {
+      statsBox.appendChild(tile(weekdayName(s.bestWeekday.index), t('stat.bestDay'),
+        pct(s.bestWeekday.rate), true));
+    }
+    // An odd tile would leave a hole in the two-column grid.
+    const tiles = statsBox.children;
+    if (tiles.length % 2) tiles[tiles.length - 1].classList.add('span2');
+
+    started.textContent = t('cal.started', { date: longDate(hb.createdAt) });
   }
 
-  function buildCalendar() {
+  function buildCalendar(keepFocusOn) {
     cal.textContent = '';
     const year = Number(cursor.slice(0, 4));
     const month = Number(cursor.slice(5, 7));
@@ -814,20 +837,20 @@ export function detail(id) {
     const atCurrentMonth = cursor === today.slice(0, 7);
 
     const prev = h('button', {
-      type: 'button', class: 'cal-nav', 'aria-label': 'Previous month',
-      onClick: () => { cursor = shiftMonth(cursor, -1); focusKey = null; buildCalendar(); },
+      type: 'button', class: 'cal-nav', 'aria-label': t('cal.prev'),
+      onClick: () => { cursor = shiftMonth(cursor, -1); focusKey = null; buildCalendar('prev'); },
     }, icon('back'));
     const next = h('button', {
-      type: 'button', class: 'cal-nav next', 'aria-label': 'Next month',
+      type: 'button', class: 'cal-nav next', 'aria-label': t('cal.next'),
       disabled: atCurrentMonth,
-      onClick: () => { cursor = shiftMonth(cursor, 1); focusKey = null; buildCalendar(); },
+      onClick: () => { cursor = shiftMonth(cursor, 1); focusKey = null; buildCalendar('next'); },
     }, icon('back'));
 
     const head = h('div', { class: 'cal-head' }, prev,
-      h('div', { class: 'cal-title', text: MONTHS_LONG[month - 1] + ' ' + year }), next);
+      h('div', { class: 'cal-title', text: monthYear(first) }), next);
     if (!atCurrentMonth) {
       head.appendChild(h('button', {
-        type: 'button', class: 'cal-today', text: 'Today',
+        type: 'button', class: 'cal-today', text: t('common.today'),
         onClick: () => { cursor = today.slice(0, 7); focusKey = today; buildCalendar(); },
       }));
     }
@@ -835,11 +858,12 @@ export function detail(id) {
 
     const wd = h('div', { class: 'cal-wd', 'aria-hidden': 'true' });
     for (let i = 0; i < 7; i++) {
-      wd.appendChild(h('span', { text: WEEKDAY_LETTERS[(i + weekStart) % 7] }));
+      wd.appendChild(h('span', { text: weekdayLetters()[(i + weekStart) % 7] }));
     }
     cal.appendChild(wd);
 
-    const grid = h('div', { class: 'cal-grid', role: 'group', 'aria-label': hb.name + ', ' + MONTHS_LONG[month - 1] + ' ' + year });
+    const grid = h('div', { class: 'cal-grid', role: 'group',
+      'aria-label': t('cal.monthAria', { name: hb.name, month: monthYear(first) }) });
     for (let i = 0, lead = weekdayIndex(first, weekStart); i < lead; i++) {
       grid.appendChild(h('span', { class: 'cal-cell is-blank', 'aria-hidden': 'true' }));
     }
@@ -856,11 +880,16 @@ export function detail(id) {
 
     const done = countDone(first, cursor + '-' + String(length).padStart(2, '0'));
     const summary = h('div', { class: 'cal-month-total' },
-      h('span', { text: done.done + ' of ' + done.days + ' days' }));
+      h('span', { text: t('common.ofDays', { done: done.done, days: done.days }) }));
     if (hb.target > 1) summary.appendChild(legend(hb));
     cal.appendChild(summary);
 
     enableSwipe(grid);
+
+    if (keepFocusOn) {
+      const wanted = keepFocusOn === 'next' ? next : prev;
+      (wanted.disabled ? prev : wanted).focus();
+    }
   }
 
   function countDone(from, to) {
@@ -925,7 +954,7 @@ export function detail(id) {
     const length = daysInMonth(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)));
     const done = countDone(first, cursor + '-' + String(length).padStart(2, '0'));
     const total = cal.querySelector('.cal-month-total span');
-    if (total) total.textContent = done.done + ' of ' + done.days + ' days';
+    if (total) total.textContent = t('common.ofDays', { done: done.done, days: done.days });
   }
 
   function onCellKey(e) {
@@ -967,7 +996,8 @@ export function detail(id) {
       swipedAway = true;
       if (dx > 0) { cursor = shiftMonth(cursor, -1); focusKey = null; buildCalendar(); }
       else if (cursor !== today.slice(0, 7)) { cursor = shiftMonth(cursor, 1); focusKey = null; buildCalendar(); }
-      setTimeout(() => { swipedAway = false; }, 0);
+      // Left set: the next pointerdown clears it. A timeout here would race the
+      // click the browser is about to dispatch for this same gesture.
     });
     grid.addEventListener('pointercancel', () => { tracking = false; });
   }
@@ -1010,11 +1040,11 @@ function longPress(node, fire) {
 }
 
 function legend(hb) {
-  const box = h('div', { class: 'grid-legend' }, 'Less');
+  const box = h('div', { class: 'grid-legend' }, t('common.less'));
   [0, 0.25, 0.5, 0.75, 1].forEach((l) => {
     box.appendChild(h('i', { style: '--l:' + l, 'data-l': l === 0 ? '0' : '', 'aria-hidden': 'true' }));
   });
-  box.appendChild(document.createTextNode('More'));
+  box.appendChild(document.createTextNode(t('common.more')));
   return box;
 }
 
@@ -1022,22 +1052,23 @@ function confirmDelete(hb) {
   const ticks = state.totalTicks(hb.id);
   const s = statsFor(hb.id);
   openSheet((sheet, close) => {
-    sheet.appendChild(h('h3', { text: 'Delete ' + hb.name + '?' }));
-    sheet.appendChild(h('p', {},
-      'This removes ' + plural(s.completions, 'completed day') + ' and '
-      + plural(ticks, 'tick') + '. You get ten seconds to undo, then it is gone.'));
+    sheet.appendChild(h('h3', { text: t('del.title', { name: hb.name }) }));
+    sheet.appendChild(h('p', { text: t('del.body', {
+      days: plural(s.completions, 'n.completedDay'),
+      ticks: plural(ticks, 'n.tick'),
+    }) }));
     sheet.appendChild(h('div', { class: 'btn-row' },
-      h('button', { type: 'button', class: 'btn', text: 'Keep it', onClick: close }),
+      h('button', { type: 'button', class: 'btn', text: t('del.keep'), onClick: close }),
       h('button', {
-        type: 'button', class: 'btn btn-danger', text: 'Delete',
+        type: 'button', class: 'btn btn-danger', text: t('common.delete'),
         onClick: () => {
           close();
           const snapshot = state.deleteHabit(hb.id);
           go('#/home');
-          toast('Deleted ' + hb.name + '.', {
-            action: 'Undo',
+          toast(t('del.done', { name: hb.name }), {
+            action: t('common.undo'),
             timeout: 10000,
-            onAction: () => { state.restore(snapshot); toast(hb.name + ' is back.'); },
+            onAction: () => { state.restore(snapshot); toast(t('del.undone', { name: hb.name })); },
           });
         },
       })));
@@ -1046,10 +1077,10 @@ function confirmDelete(hb) {
 
 function notFound() {
   const el = h('div', { class: 'screen' },
-    topbar('Not found', { back: () => go('#/home') }),
+    topbar(t('notFound.title'), { back: () => go('#/home') }),
     h('div', { class: 'empty' },
-      h('h2', { text: 'That habit is gone' }),
-      h('p', { text: 'It may have been deleted on another tab.' })));
+      h('h2', { text: t('notFound.head') }),
+      h('p', { text: t('notFound.body') })));
   return { el, update() {} };
 }
 
@@ -1074,7 +1105,7 @@ export function editor(id) {
   };
 
   const el = h('div', { class: 'screen' });
-  el.appendChild(topbar(existing ? 'Edit habit' : 'New habit', {
+  el.appendChild(topbar(t(existing ? 'edit.edit' : 'edit.new'), {
     back: () => history.back(),
   }));
 
@@ -1086,13 +1117,15 @@ export function editor(id) {
     preview.style.setProperty('--habit', draft.color);
     preview.style.setProperty('--on-fill', inkOn(draft.color));
     preview.textContent = '';
-    const fake = { id: '_preview', name: draft.name || 'Untitled', icon: draft.icon, color: draft.color, target: draft.target };
+    const fake = { id: '_preview', name: draft.name || t('edit.untitled'), icon: draft.icon, color: draft.color, target: draft.target };
     preview.appendChild(h('div', { class: 'card-head' },
       glyph(fake),
       h('div', { style: 'flex:1;min-width:0' },
         h('div', { class: 'name display', style: 'font-size:17px', text: fake.name }),
         h('div', { class: 'meta dim', style: 'font-size:12px' },
-          draft.target > 1 ? draft.target + '× daily · ' + rangeLabel(draft.range) : rangeLabel(draft.range))),
+          draft.target > 1
+            ? t('home.perDay', { n: draft.target }) + ' · ' + rangeLabel(draft.range)
+            : rangeLabel(draft.range))),
       h('span', { class: 'tick' + (draft.target > 1 ? '' : ' is-done') },
         draft.target > 1 ? '0/' + draft.target : icon('check'))));
     previewGrid = sampleGrid(draft);
@@ -1102,7 +1135,7 @@ export function editor(id) {
   // name
   const nameInput = h('input', {
     class: 'input', type: 'text', id: 'f-name', maxLength: 40,
-    placeholder: 'Read, Run, Water…', value: draft.name,
+    placeholder: t('edit.namePlaceholder'), value: draft.name,
     onInput: (e) => { draft.name = e.target.value; paintPreview(); },
   });
 
@@ -1120,7 +1153,7 @@ export function editor(id) {
   ['svg', 'emoji', 'letter'].forEach((kind) => {
     tabs.appendChild(h('button', {
       type: 'button', role: 'tab', dataset: { kind },
-      text: kind === 'svg' ? 'Icons' : kind === 'emoji' ? 'Emoji' : 'Letter',
+      text: t(kind === 'svg' ? 'edit.tabIcons' : kind === 'emoji' ? 'edit.tabEmoji' : 'edit.tabLetter'),
       onClick: () => setTab(kind),
     }));
   });
@@ -1135,7 +1168,7 @@ export function editor(id) {
 
   function buildSvgPicker() {
     ICON_GROUPS.forEach((group) => {
-      picker.appendChild(h('h4', { text: group.name }));
+      picker.appendChild(h('h4', { text: t('icons.' + group.name) }));
       const grid = h('div', { class: 'picker-grid' });
       group.icons.forEach((name) => {
         grid.appendChild(h('button', {
@@ -1153,7 +1186,7 @@ export function editor(id) {
     const grid = h('div', { class: 'picker-grid' });
     EMOJI.forEach((e) => {
       grid.appendChild(h('button', {
-        type: 'button', class: 'pick', dataset: { value: e }, 'aria-label': 'Emoji ' + e,
+        type: 'button', class: 'pick', dataset: { value: e }, 'aria-label': t('edit.tabEmoji') + ' ' + e,
         'aria-pressed': String(draft.icon.type === 'emoji' && draft.icon.value === e),
         onClick: () => pickIcon({ type: 'emoji', value: e }),
       }, h('span', { class: 'emoji', text: e })));
@@ -1168,7 +1201,7 @@ export function editor(id) {
     const input = h('input', {
       class: 'input', type: 'text', value,
       style: 'text-align:center;font-family:var(--font-display);font-size:26px',
-      'aria-label': 'Letter',
+      'aria-label': t('edit.letter'),
       autocapitalize: 'characters',
       // Take the last character typed, not the first: with maxLength the field
       // fills up and every further keypress is silently dropped, so the default
@@ -1183,7 +1216,7 @@ export function editor(id) {
       onFocus: (e) => e.target.select(),
     });
     picker.appendChild(input);
-    picker.appendChild(h('p', { class: 'help', text: 'Set in the display face, in the habit colour.' }));
+    picker.appendChild(h('p', { class: 'help', text: t('edit.letterHelp') }));
     if (draft.icon.type !== 'letter') pickIcon({ type: 'letter', value });
   }
 
@@ -1192,13 +1225,13 @@ export function editor(id) {
   SWATCHES.forEach((c) => {
     swatches.appendChild(h('button', {
       type: 'button', class: 'swatch', style: '--c:' + c, dataset: { c },
-      'aria-label': 'Colour ' + c, 'aria-pressed': String(c === draft.color),
+      'aria-label': t('edit.colourAria', { hex: c }), 'aria-pressed': String(c === draft.color),
       onClick: () => setColor(c),
     }));
   });
   const custom = h('input', {
     type: 'color', class: 'swatch-custom', value: draft.color,
-    'aria-label': 'Custom colour',
+    'aria-label': t('edit.customColour'),
     onInput: (e) => setColor(e.target.value, true),
   });
   swatches.appendChild(custom);
@@ -1215,23 +1248,23 @@ export function editor(id) {
   const targetNote = h('p', { class: 'help' });
   function paintTargetNote() {
     if (draft.target === 1) {
-      targetNote.textContent = 'One tick fills the square.';
+      targetNote.textContent = t('edit.targetOne');
     } else {
-      targetNote.textContent = 'Each tick fills a ' + fraction(draft.target)
-        + ' of the square. A day counts toward a streak only at ' + draft.target + '.';
+      targetNote.textContent = t('edit.targetMany', {
+        fraction: fraction(draft.target), n: draft.target,
+      });
     }
     if (existing && draft.target !== existing.target) {
       targetNote.appendChild(h('br'));
-      targetNote.appendChild(h('span', { style: 'color:var(--brass)' },
-        'Changing the target re-scores your history: past days are measured '
-        + 'against ' + draft.target + ' instead of ' + existing.target + '.'));
+      targetNote.appendChild(h('span', { style: 'color:var(--accent)',
+        text: t('edit.targetChanged', { next: draft.target, prev: existing.target }) }));
     }
   }
   const targetBox = stepper(draft.target, 1, 20, (n) => {
     draft.target = n;
     paintTargetNote();
     paintPreview();
-  }, 'daily target');
+  }, t('edit.target').toLowerCase());
   paintTargetNote();
 
   // range
@@ -1240,44 +1273,44 @@ export function editor(id) {
     onChange: (e) => { draft.range = e.target.value; paintPreview(); },
   });
   RANGES.forEach(r => rangeSel.appendChild(h('option', {
-    value: r.id, text: r.label, selected: r.id === draft.range,
+    value: r.id, text: rangeLabel(r.id), selected: r.id === draft.range,
   })));
 
   el.appendChild(preview);
   el.appendChild(h('div', { class: 'field' },
-    h('label', { class: 'label', for: 'f-name', text: 'Name' }), nameInput));
+    h('label', { class: 'label', for: 'f-name', text: t('edit.name') }), nameInput));
   el.appendChild(h('div', { class: 'field' },
-    h('span', { class: 'label', text: 'Icon' }), tabs, picker));
+    h('span', { class: 'label', text: t('edit.icon') }), tabs, picker));
   el.appendChild(h('div', { class: 'field' },
-    h('span', { class: 'label', text: 'Colour' }), swatches));
+    h('span', { class: 'label', text: t('edit.colour') }), swatches));
   el.appendChild(h('div', { class: 'field' },
-    h('span', { class: 'label', text: 'Daily target' }), targetBox, targetNote));
+    h('span', { class: 'label', text: t('edit.target') }), targetBox, targetNote));
   el.appendChild(h('div', { class: 'field' },
-    h('label', { class: 'label', for: 'f-range', text: 'Grid range' }), rangeSel));
+    h('label', { class: 'label', for: 'f-range', text: t('edit.range') }), rangeSel));
 
   const save = h('button', {
-    type: 'button', class: 'btn btn-primary', text: existing ? 'Save' : 'Add habit',
+    type: 'button', class: 'btn btn-primary', text: t(existing ? 'common.save' : 'edit.add'),
     onClick: () => {
-      if (!draft.name.trim()) { nameInput.focus(); toast('Give it a name first.'); return; }
+      if (!draft.name.trim()) { nameInput.focus(); toast(t('edit.needName')); return; }
       if (existing) {
         state.updateHabit(existing.id, draft);
         go('#/habit/' + existing.id);
       } else {
         const created = state.addHabit(draft);
         go('#/home');
-        toast(created.name + ' added.');
+        toast(t('edit.added', { name: created.name }));
       }
     },
   });
   el.appendChild(h('div', { class: 'btn-row', style: 'margin-top:6px' },
-    h('button', { type: 'button', class: 'btn', text: 'Cancel', onClick: () => history.back() }),
+    h('button', { type: 'button', class: 'btn', text: t('common.cancel'), onClick: () => history.back() }),
     save));
 
   if (existing) {
     el.appendChild(h('div', { class: 'hr' }));
     el.appendChild(h('button', {
       type: 'button', class: 'btn btn-danger', onClick: () => confirmDelete(existing),
-    }, icon('trash'), 'Delete habit'));
+    }, icon('trash'), t('edit.deleteHabit')));
   }
 
   setTab(draft.icon.type);
@@ -1287,8 +1320,8 @@ export function editor(id) {
 }
 
 function fraction(n) {
-  const names = { 2: 'half', 3: 'third', 4: 'quarter', 5: 'fifth', 6: 'sixth', 8: 'eighth' };
-  return names[n] || ('1/' + n);
+  const known = [2, 3, 4, 5, 6, 8];
+  return known.indexOf(n) >= 0 ? t('frac.' + n) : t('frac.other', { n });
 }
 
 /** A read-only grid over invented data, so the preview shows what the colour,
@@ -1319,60 +1352,69 @@ export function settings() {
   const el = h('div', { class: 'screen' });
   const s = state.settings();
 
-  el.appendChild(topbar('Settings', { back: () => go('#/home') }));
+  el.appendChild(topbar(t('common.settings'), { back: () => go('#/home') }));
 
   const nameInput = h('input', {
     class: 'input', type: 'text', id: 's-name', maxLength: 32,
-    value: state.get().username, placeholder: 'Your name',
+    value: state.get().username, placeholder: t('onboard.namePlaceholder'),
     onChange: (e) => { state.setUsername(e.target.value); },
   });
   el.appendChild(h('div', { class: 'field' },
-    h('label', { class: 'label', for: 's-name', text: 'Name' }), nameInput,
-    h('p', { class: 'help', text: 'Stored on this device only. It appears on the home screen and in export filenames.' })));
+    h('label', { class: 'label', for: 's-name', text: t('edit.name') }), nameInput,
+    h('p', { class: 'help', text: t('set.nameHelp') })));
 
-  el.appendChild(h('div', { class: 'section-title', text: 'Appearance' }));
+  el.appendChild(h('div', { class: 'section-title', text: t('set.appearance') }));
 
-  const themeOptions = THEMES.map(t => ({ value: t.id, label: t.label + (t.mode === 'light' ? ' · light' : '') }));
-  themeOptions.push({ value: 'auto', label: 'Auto · match system' });
+  const themeOptions = THEMES.map(x => ({
+    value: x.id,
+    label: x.mode === 'light' ? t('set.themeLight', { name: themeLabel(x.id) }) : themeLabel(x.id),
+  }));
+  themeOptions.push({ value: 'auto', label: t('set.themeAuto') });
 
   const appearance = h('div', { class: 'rows' },
-    selectRow('Theme', s.theme, themeOptions, (v) => {
+    selectRow(t('set.language'), s.lang || detectLang(),
+      LANGUAGES.map(l => ({ value: l.id, label: l.label })), (v) => {
+        state.setSettings({ lang: v });
+        setLang(v);
+        rerender();
+      }),
+    selectRow(t('set.theme'), s.theme, themeOptions, (v) => {
       state.setSettings({ theme: v });
       applyTheme();
       rerender();
     }));
 
   if (s.theme === 'auto') {
-    appearance.appendChild(selectRow('When dark', s.autoDark,
-      THEMES.filter(t => t.mode === 'dark').map(t => ({ value: t.id, label: t.label })),
+    appearance.appendChild(selectRow(t('set.whenDark'), s.autoDark,
+      THEMES.filter(x => x.mode === 'dark').map(x => ({ value: x.id, label: themeLabel(x.id) })),
       (v) => { state.setSettings({ autoDark: v }); applyTheme(); }));
-    appearance.appendChild(selectRow('When light', s.autoLight,
-      THEMES.filter(t => t.mode === 'light').map(t => ({ value: t.id, label: t.label })),
+    appearance.appendChild(selectRow(t('set.whenLight'), s.autoLight,
+      THEMES.filter(x => x.mode === 'light').map(x => ({ value: x.id, label: themeLabel(x.id) })),
       (v) => { state.setSettings({ autoLight: v }); applyTheme(); }));
   }
   appearance.appendChild(accentRow());
   el.appendChild(appearance);
-  el.appendChild(h('p', { class: 'help', text: s.theme === 'auto'
-    ? 'Auto follows your phone between the two themes above. The accent colour applies to whichever is showing.'
-    : 'The accent colours buttons, the focus ring and the marker on today. Each theme has its own; set one here to override them all.' }));
+  el.appendChild(h('p', { class: 'help',
+    text: t(s.theme === 'auto' ? 'set.autoHelp' : 'set.accentHelp') }));
 
-  el.appendChild(h('div', { class: 'section-title', text: 'Grid' }));
+  el.appendChild(h('div', { class: 'section-title', text: t('set.gridSection') }));
   el.appendChild(h('div', { class: 'rows' },
-    selectRow('Week starts on', s.weekStart, [
-      { value: '1', label: 'Monday' }, { value: '0', label: 'Sunday' },
+    selectRow(t('set.weekStart'), s.weekStart, [
+      { value: '1', label: t('set.monday') }, { value: '0', label: t('set.sunday') },
     ], (v) => { state.setSettings({ weekStart: Number(v) }); rerender(); }),
-    selectRow('Default range', s.defaultRange, RANGES.map(r => ({ value: r.id, label: r.label })),
+    selectRow(t('set.defaultRange'), s.defaultRange,
+      RANGES.map(r => ({ value: r.id, label: rangeLabel(r.id) })),
       (v) => state.setSettings({ defaultRange: v })),
-    selectRow('Cell unit', s.density, [
-      { value: 'auto', label: 'Automatic' },
-      { value: 'day', label: 'Always days' },
-      { value: 'week', label: 'Always weeks' },
-      { value: 'month', label: 'Always months' },
+    selectRow(t('set.cellUnit'), s.density, [
+      { value: 'auto', label: t('set.unitAuto') },
+      { value: 'day', label: t('set.unitDay') },
+      { value: 'week', label: t('set.unitWeek') },
+      { value: 'month', label: t('set.unitMonth') },
     ], (v) => { state.setSettings({ density: v }); rerender(); })));
-  el.appendChild(h('p', { class: 'help', text: 'Automatic picks the cell unit that fits each range — days up to two years, then weeks, then months. A habit’s own range is set when you edit it.' }));
+  el.appendChild(h('p', { class: 'help', text: t('set.gridHelp') }));
 
   // -- data
-  el.appendChild(h('div', { class: 'section-title', text: 'Your data' }));
+  el.appendChild(h('div', { class: 'section-title', text: t('set.dataSection') }));
 
   const fileInput = h('input', {
     type: 'file', accept: 'application/json,.json', style: 'display:none',
@@ -1386,96 +1428,90 @@ export function settings() {
   const rows = h('div', { class: 'rows' },
     h('button', {
       type: 'button', class: 'row', onClick: () => {
-        if (io.download()) toast('Exported ' + io.filename());
-        else toast('This browser blocked the download. Try Copy instead.', { error: true });
+        if (io.download()) toast(t('set.exported', { file: io.filename() }));
+        else toast(t('set.exportBlocked'), { error: true });
         rerender();
       },
-    }, icon('download'), 'Export a copy', h('span', { class: 'val', text: '.json' })),
+    }, icon('download'), t('set.export'), h('span', { class: 'val', text: '.json' })),
     h('button', {
       type: 'button', class: 'row', onClick: () => {
         io.copyToClipboard()
-          .then(ok => toast(ok ? 'Copied to the clipboard.' : 'Could not copy.', { error: !ok }))
-          .catch(() => toast('This browser would not let the app copy.', { error: true }));
+          .then(ok => toast(t(ok ? 'set.copied' : 'set.copyFailed'), { error: !ok }))
+          .catch(() => toast(t('set.copyBlocked'), { error: true }));
       },
-    }, icon('edit'), 'Copy to clipboard', h('span', { class: 'val', text: 'fallback' })),
+    }, icon('edit'), t('set.copy'), h('span', { class: 'val', text: t('set.copyNote') })),
     h('button', {
       type: 'button', class: 'row', onClick: () => fileInput.click(),
-    }, icon('upload'), 'Import a file'));
+    }, icon('upload'), t('set.import')));
 
   if (io.hasBackup()) {
     rows.appendChild(h('button', {
       type: 'button', class: 'row', onClick: () => {
         openSheet((sheet, close) => {
-          sheet.appendChild(h('h3', { text: 'Restore the pre-import backup?' }));
-          sheet.appendChild(h('p', { text: 'This replaces everything currently in the app with the snapshot taken just before your last import.' }));
+          sheet.appendChild(h('h3', { text: t('set.restoreTitle') }));
+          sheet.appendChild(h('p', { text: t('set.restoreBody') }));
           sheet.appendChild(h('div', { class: 'btn-row' },
-            h('button', { type: 'button', class: 'btn', text: 'Cancel', onClick: close }),
+            h('button', { type: 'button', class: 'btn', text: t('common.cancel'), onClick: close }),
             h('button', {
-              type: 'button', class: 'btn btn-primary', text: 'Restore',
-              onClick: () => { close(); io.restoreBackup(); toast('Backup restored.'); rerender(); },
+              type: 'button', class: 'btn btn-primary', text: t('common.restore'),
+              onClick: () => { close(); io.restoreBackup(); toast(t('set.restored')); rerender(); },
             })));
         });
       },
-    }, icon('back'), 'Restore backup', h('span', { class: 'val', text: 'from last import' })));
+    }, icon('back'), t('set.restoreBackup'), h('span', { class: 'val', text: t('set.restoreNote') })));
   }
   el.appendChild(rows);
   el.appendChild(fileInput);
 
   const used = storage.usage();
   const last = s.lastExport;
-  el.appendChild(h('p', { class: 'help' },
-    plural(state.habits().length, 'habit') + ' · '
-    + (used > 1024 ? Math.round(used / 1024) + ' KB' : used + ' bytes') + ' stored · '
-    + (last ? 'last export ' + longDate(last) : 'never exported') + '.'));
+  el.appendChild(h('p', { class: 'help', text: t('set.storageLine', {
+    habits: plural(state.habits().length, 'n.habit'),
+    size: used > 1024 ? Math.round(used / 1024) + ' KB' : used + ' B',
+    export: last ? t('set.lastExport', { date: longDate(last) }) : t('set.neverExported'),
+  }) }));
 
   // -- app
-  el.appendChild(h('div', { class: 'section-title', text: 'App' }));
+  el.appendChild(h('div', { class: 'section-title', text: t('set.appSection') }));
   const appRows = h('div', { class: 'rows' });
   if (!isStandalone()) {
     appRows.appendChild(h('button', {
       type: 'button', class: 'row', onClick: () => {
         if (canInstall()) promptInstall().then(ok => { if (ok) rerender(); });
-        else toast('Open your browser menu and choose "Add to Home screen".', { timeout: 6000 });
+        else toast(t('onboard.installManual'), { timeout: 6000 });
       },
-    }, icon('download'), 'Add to Home screen'));
+    }, icon('download'), t('onboard.install')));
   }
   appRows.appendChild(h('button', {
     type: 'button', class: 'row', onClick: () => {
       openSheet((sheet, close) => {
-        sheet.appendChild(h('h3', { text: 'Where your data lives' }));
-        sheet.appendChild(h('p', {},
-          'Everything is in this browser, under one key, on this device. The app makes '
-          + 'no network requests of any kind — its content security policy forbids them '
-          + 'outright, so it cannot phone home even by mistake.'));
-        sheet.appendChild(h('p', {},
-          'Nothing is backed up for you. Clearing site data, or uninstalling, erases it. '
-          + 'Export now and then.'));
-        sheet.appendChild(h('button', { type: 'button', class: 'btn', text: 'Close', onClick: close }));
+        sheet.appendChild(h('h3', { text: t('set.aboutTitle') }));
+        sheet.appendChild(h('p', { text: t('set.aboutBody1') }));
+        sheet.appendChild(h('p', { text: t('set.aboutBody2') }));
+        sheet.appendChild(h('button', { type: 'button', class: 'btn', text: t('common.close'), onClick: close }));
       });
     },
-  }, icon('book'), 'About your data'));
+  }, icon('book'), t('set.about')));
 
   appRows.appendChild(h('button', {
     type: 'button', class: 'row', style: 'color:var(--danger)',
     onClick: () => {
       openSheet((sheet, close) => {
-        sheet.appendChild(h('h3', { text: 'Delete everything?' }));
-        sheet.appendChild(h('p', {},
-          'Every habit, every tick, your name and settings. There is no undo and no copy '
-          + 'anywhere else. Export first if you are not certain.'));
+        sheet.appendChild(h('h3', { text: t('set.deleteAllTitle') }));
+        sheet.appendChild(h('p', { text: t('set.deleteAllBody') }));
         sheet.appendChild(h('div', { class: 'btn-row' },
-          h('button', { type: 'button', class: 'btn', text: 'Cancel', onClick: close }),
+          h('button', { type: 'button', class: 'btn', text: t('common.cancel'), onClick: close }),
           h('button', {
-            type: 'button', class: 'btn btn-danger', text: 'Delete everything',
+            type: 'button', class: 'btn btn-danger', text: t('set.deleteAll'),
             onClick: () => { close(); state.reset(); go('#/welcome'); },
           })));
       });
     },
-  }, icon('trash'), 'Delete everything'));
+  }, icon('trash'), t('set.deleteAll')));
   el.appendChild(appRows);
 
-  el.appendChild(h('p', { class: 'help', style: 'text-align:center;margin-top:26px' },
-    'Habit Grid · local-first · no accounts, no server, no requests'));
+  el.appendChild(h('p', { class: 'help', style: 'text-align:center;margin-top:26px',
+    text: t('set.footer') }));
 
   function startImport(file) {
     io.readFile(file)
@@ -1483,35 +1519,35 @@ export function settings() {
         const result = io.validate(raw);
         if (!result.ok) {
           openSheet((sheet, close) => {
-            sheet.appendChild(h('h3', { text: 'That import was refused' }));
-            sheet.appendChild(h('p', { text: 'Nothing was changed. ' + result.errors.join(' ') }));
-            sheet.appendChild(h('button', { type: 'button', class: 'btn', text: 'Close', onClick: close }));
+            sheet.appendChild(h('h3', { text: t('imp.refused') }));
+            sheet.appendChild(h('p', { text: t('imp.refusedBody', { errors: result.errors.join(' ') }) }));
+            sheet.appendChild(h('button', { type: 'button', class: 'btn', text: t('common.close'), onClick: close }));
           });
           return;
         }
         openSheet((sheet, close) => {
           const c = result.counts;
-          sheet.appendChild(h('h3', { text: 'Import ' + plural(c.habits, 'habit') + '?' }));
-          sheet.appendChild(h('p', {},
-            'That file holds ' + plural(c.habits, 'habit') + ', ' + plural(c.days, 'day')
-            + ' of history and ' + plural(c.ticks, 'tick') + '. '
-            + 'Your current data is backed up first either way.'
-            + (result.warnings.length ? ' ' + result.warnings.join(' ') : '')));
+          sheet.appendChild(h('h3', { text: t('imp.title', { habits: plural(c.habits, 'n.habit') }) }));
+          sheet.appendChild(h('p', { text: t('imp.body', {
+            habits: plural(c.habits, 'n.habit'),
+            days: plural(c.days, 'n.day'),
+            ticks: plural(c.ticks, 'n.tick'),
+          }) + (result.warnings.length ? ' ' + result.warnings.join(' ') : '') }));
           sheet.appendChild(h('div', { class: 'rows' },
             h('button', {
               type: 'button', class: 'row', onClick: () => {
-                close(); io.merge(result.data); toast('Merged.'); rerender();
+                close(); io.merge(result.data); toast(t('imp.merged')); rerender();
               },
-            }, icon('plus'), 'Merge',
-              h('span', { class: 'val', text: 'keep both, higher count wins' })),
+            }, icon('plus'), t('imp.merge'),
+              h('span', { class: 'val', text: t('imp.mergeNote') })),
             h('button', {
               type: 'button', class: 'row', onClick: () => {
-                close(); io.replaceAll(result.data); toast('Replaced.'); rerender();
+                close(); io.replaceAll(result.data); toast(t('imp.replaced')); rerender();
               },
-            }, icon('upload'), 'Replace',
-              h('span', { class: 'val', text: 'wipe, then load' }))));
+            }, icon('upload'), t('imp.replace'),
+              h('span', { class: 'val', text: t('imp.replaceNote') }))));
           sheet.appendChild(h('div', { style: 'height:12px' }));
-          sheet.appendChild(h('button', { type: 'button', class: 'btn', text: 'Cancel', onClick: close }));
+          sheet.appendChild(h('button', { type: 'button', class: 'btn', text: t('common.cancel'), onClick: close }));
         });
       })
       .catch(err => toast(err.message, { error: true }));
@@ -1523,7 +1559,7 @@ export function settings() {
 function accentRow() {
   const custom = state.settings().accent;
   const swatch = h('input', {
-    type: 'color', class: 'accent-swatch', 'aria-label': 'Accent colour',
+    type: 'color', class: 'accent-swatch', 'aria-label': t('set.accent'),
     value: custom || themeAccent(),
     onInput: (e) => {
       state.setSettings({ accent: e.target.value });
@@ -1532,7 +1568,7 @@ function accentRow() {
     },
   });
   const reset = h('button', {
-    type: 'button', class: 'accent-reset', text: 'Reset',
+    type: 'button', class: 'accent-reset', text: t('common.reset'),
     disabled: !custom,
     onClick: () => {
       state.setSettings({ accent: null });
@@ -1542,7 +1578,7 @@ function accentRow() {
     },
   });
   return h('div', { class: 'row' },
-    h('span', { text: 'Accent colour' }),
+    h('span', { text: t('set.accent') }),
     h('div', { class: 'accent-row' }, swatch, reset));
 }
 
@@ -1562,6 +1598,10 @@ export function resolvedTheme() {
     return dark ? (s.autoDark || 'ledger') : (s.autoLight || 'paper');
   }
   return THEMES.some(t => t.id === s.theme) ? s.theme : DEFAULT_THEME;
+}
+
+export function applyLang() {
+  setLang(state.settings().lang || detectLang());
 }
 
 export function applyTheme() {

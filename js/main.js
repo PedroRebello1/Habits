@@ -5,6 +5,7 @@ import * as state from './state.js';
 import * as storage from './storage.js';
 import * as views from './views.js';
 import { todayKey } from './dates.js';
+import { t } from './i18n.js';
 
 const app = document.getElementById('app');
 let current = null;
@@ -50,7 +51,13 @@ function render() {
   current = view(route);
   app.appendChild(current.el);
   window.scrollTo(0, 0);
-  document.title = route.name === 'home' ? 'Habit Grid' : 'Habit Grid — ' + route.name;
+  const titles = {
+    week: 'week.title', new: 'edit.new', edit: 'edit.edit', settings: 'common.settings',
+  };
+  const habit = route.name === 'habit' && state.habit(route.id);
+  document.title = habit ? t('app.name') + ' — ' + habit.name
+    : titles[route.name] ? t('app.name') + ' — ' + t(titles[route.name])
+    : t('app.name');
 }
 
 window.addEventListener('hashchange', render);
@@ -62,6 +69,12 @@ views.setRerender(render);
 // structural rebuilds the screen.
 state.subscribe((detail) => {
   if (!current) return;
+  if (detail.wholesale) {
+    // An import or a backup restore can carry a different language, theme and
+    // accent. Re-apply them before painting, or the screen keeps the old ones.
+    views.applyLang();
+    views.applyTheme();
+  }
   const structural = detail.added || detail.deleted || detail.restored
     || detail.reordered || detail.wholesale;
   if (structural) render();
@@ -76,7 +89,7 @@ storage.onError((err) => {
 storage.onExternalChange((next) => {
   if (!next) return;
   state.adopt(next, { persist: false });
-  views.toast('Updated from another tab.');
+  views.toast(t('app.otherTab'));
 });
 
 // Auto theme follows the OS, including a change while the app is open.
@@ -110,7 +123,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => {
   views.setInstallPrompt(null);
-  views.toast('Installed. It works offline now.');
+  views.toast(t('app.installed'));
 });
 
 // -- service worker ----------------------------------------------------------
@@ -125,8 +138,8 @@ if ('serviceWorker' in navigator) {
         if (!next) return;
         next.addEventListener('statechange', () => {
           if (next.state === 'installed' && navigator.serviceWorker.controller) {
-            views.toast('A new version is ready.', {
-              action: 'Reload',
+            views.toast(t('sw.updated'), {
+              action: t('sw.reload'),
               timeout: 12000,
               onAction: () => { next.postMessage('skip-waiting'); location.reload(); },
             });
@@ -140,6 +153,7 @@ if ('serviceWorker' in navigator) {
 // -- boot --------------------------------------------------------------------
 
 state.boot();
+views.applyLang();
 views.applyTheme();
 if (!location.hash) location.replace(state.isFresh() ? '#/welcome' : '#/home');
 render();

@@ -7,6 +7,7 @@
 import * as storage from './storage.js';
 import * as state from './state.js';
 import { isKey, todayKey, diffDays, RANGE_IDS } from './dates.js';
+import { t, plural } from './i18n.js';
 
 export function payload() {
   const s = state.get();
@@ -92,36 +93,34 @@ export function validate(raw) {
   const warnings = [];
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, errors: ['That file is not a Habit Grid export.'] };
+    return { ok: false, errors: [t('err.notExport')] };
   }
   if (raw.schema !== undefined && Number(raw.schema) > storage.SCHEMA) {
-    errors.push('That file was written by a newer version of Habit Grid (schema '
-      + raw.schema + '). Update the app first.');
+    errors.push(t('err.newerSchema', { n: raw.schema }));
   }
   if (!Array.isArray(raw.habits)) {
-    return { ok: false, errors: ['That file has no habits list.'] };
+    return { ok: false, errors: [t('err.noHabits')] };
   }
   if (raw.entries === null || typeof raw.entries !== 'object' || Array.isArray(raw.entries)) {
-    return { ok: false, errors: ['That file has no entries object.'] };
+    return { ok: false, errors: [t('err.noEntries')] };
   }
 
   const seen = new Set();
   const habits = [];
   raw.habits.forEach((h, i) => {
-    const where = 'habit ' + (i + 1);
-    if (!h || typeof h !== 'object') { errors.push(where + ' is not an object.'); return; }
+    if (!h || typeof h !== 'object') { errors.push(t('err.badHabit', { i: i + 1 })); return; }
     if (typeof h.id !== 'string' || !ID_RE.test(h.id)) {
-      errors.push(where + ' has an invalid id.');
+      errors.push(t('err.badId', { i: i + 1 }));
       return;
     }
-    if (seen.has(h.id)) { errors.push('Two habits share the id ' + h.id + '.'); return; }
+    if (seen.has(h.id)) { errors.push(t('err.dupId', { id: h.id })); return; }
     seen.add(h.id);
     if (h.createdAt !== undefined && !isKey(h.createdAt)) {
-      warnings.push(where + ' had an unreadable created date; today was used.');
+      warnings.push(t('err.badDate', { i: i + 1 }));
     }
     habits.push({
       id: h.id,
-      name: typeof h.name === 'string' && h.name.trim() ? h.name.trim().slice(0, 40) : 'Untitled',
+      name: typeof h.name === 'string' && h.name.trim() ? h.name.trim().slice(0, 40) : t('edit.untitled'),
       icon: sanitiseIcon(h.icon),
       color: COLOR_RE.test(h.color) ? h.color : '#C6A15B',
       target: Number.isFinite(h.target) ? Math.max(1, Math.min(20, Math.round(h.target))) : 1,
@@ -150,7 +149,7 @@ export function validate(raw) {
     entries[id] = dst;
   }
   habits.forEach(h => { if (!entries[h.id]) entries[h.id] = {}; });
-  if (dropped) warnings.push(dropped + ' malformed entr' + (dropped === 1 ? 'y was' : 'ies were') + ' skipped.');
+  if (dropped) warnings.push(t('err.skipped', { n: plural(dropped, 'n.entry') }));
 
   const data = {
     schema: storage.SCHEMA,
@@ -238,15 +237,15 @@ export function restoreBackup() {
 /** Reads a File and parses it. Rejects with a readable message. */
 export function readFile(file) {
   return new Promise((resolve, reject) => {
-    if (!file) { reject(new Error('No file chosen.')); return; }
-    if (file.size > 20 * 1024 * 1024) { reject(new Error('That file is too large to be an export.')); return; }
+    if (!file) { reject(new Error(t('err.noFile'))); return; }
+    if (file.size > 20 * 1024 * 1024) { reject(new Error(t('err.tooLarge'))); return; }
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('That file could not be read.'));
+    reader.onerror = () => reject(new Error(t('err.unreadable')));
     reader.onload = () => {
       try {
         resolve(JSON.parse(String(reader.result)));
       } catch (err) {
-        reject(new Error('That file is not valid JSON.'));
+        reject(new Error(t('err.notJson')));
       }
     };
     reader.readAsText(file);

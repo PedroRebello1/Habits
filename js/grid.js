@@ -9,8 +9,9 @@
 
 import {
   todayKey, addDays, diffDays, startOfWeek, monthOf, yearOf, dayOf,
-  daysInMonth, longDate, weekdayLetter, MONTHS, MONTHS_LONG, min, max,
+  daysInMonth, min, max,
 } from './dates.js';
+import { t, longDate, monthShort, monthYear, weekdayLetter } from './i18n.js';
 
 // Range id -> cell unit and size, from the density table in the plan.
 const DENSITY = {
@@ -106,7 +107,7 @@ function dayPlan(startKey, today, weekStart, size, gap, single) {
         else cells.push({ row: r, from: k, to: k });
       }
       const prev = i > 0 ? addDays(gridStart, (i - 1) * 7) : null;
-      const label = (!prev || monthOf(ws) !== monthOf(prev)) ? MONTHS[monthOf(ws) - 1] : null;
+      const label = (!prev || monthOf(ws) !== monthOf(prev)) ? monthShort(monthOf(ws)) : null;
       const rule = !!prev && yearOf(ws) !== yearOf(prev);
       return { x: xs[i], cells, label, rule, month: monthOf(ws) };
     },
@@ -173,7 +174,7 @@ function monthPlan(firstYear, lastYear, today, size, gap) {
         const to = y + '-' + m + '-' + daysInMonth(y, i + 1);
         cells.push({ row: r, from, to: min(to, today) });
       }
-      return { x: gutterW + i * pitch, cells, label: MONTHS[i][0], rule: false };
+      return { x: gutterW + i * pitch, cells, label: monthShort(i + 1).charAt(0).toUpperCase(), rule: false };
     },
   };
 }
@@ -400,26 +401,26 @@ export function createGrid(opts) {
   /** Recompute one cell's fill level and label from current data. */
   function paint(node) {
     const from = node.dataset.from, to = node.dataset.to;
-    const t = target();
+    const target_ = target();
     let level = 0, label = '';
 
     if (from === to) {
       const n = read(from);
-      level = Math.min(n / t, 1);
+      level = Math.min(n / target_, 1);
       node.classList.toggle('is-today', from === today);
       node.classList.toggle('is-pre', !!o.createdAt && from < o.createdAt && n === 0);
-      label = longDate(from) + ' — ' + (t > 1
-        ? n + ' of ' + t + ' done'
-        : (n > 0 ? 'done' : 'not done'));
+      label = longDate(from) + ' — ' + (target_ > 1
+        ? t('common.ofDone', { n, t: target_ })
+        : t(n > 0 ? 'common.done' : 'common.notDone'));
     } else {
       let days = 0, done = 0;
       for (let k = from; k <= to; k = addDays(k, 1)) {
         days++;
-        if (read(k) >= t) done++;
+        if (read(k) >= target_) done++;
       }
       level = days ? done / days : 0;
       node.classList.toggle('is-today', from <= today && today <= to);
-      label = periodLabel(from) + ' — ' + done + ' of ' + days + ' days done';
+      label = periodLabel(from) + ' — ' + t('common.ofDays', { done, days });
     }
 
     node.style.setProperty('--level', String(level));
@@ -429,8 +430,8 @@ export function createGrid(opts) {
   }
 
   function periodLabel(from) {
-    if (plan.unit === 'month') return MONTHS_LONG[monthOf(from) - 1] + ' ' + yearOf(from);
-    return 'Week of ' + longDate(from);
+    if (plan.unit === 'month') return monthYear(from);
+    return t('zoom.weekOf', { date: longDate(from) });
   }
 
   function repaintColumn(i) {
@@ -509,9 +510,9 @@ export function createGrid(opts) {
       return;
     }
     if (!o.interactive || from > today) return;
-    const t = target();
+    const limit = target();
     const current = read(from);
-    const next = current >= t ? 0 : current + 1;
+    const next = current >= limit ? 0 : current + 1;
     if (o.write) o.write(from, next);
     paint(node);
     setFocus(Number(node.dataset.col), Number(node.dataset.row), false);
