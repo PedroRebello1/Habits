@@ -223,8 +223,9 @@ const EN = {
   'err.generic': 'Could not save to this device.',
   'err.parse': 'Stored data could not be parsed. It has been left untouched.',
 
-  'sw.updated': 'A new version is ready.',
-  'sw.reload': 'Reload',
+  // The "new version is ready" bar carries its own strings — it ships in
+  // js/update.js, shared with the other apps, and has to work even if this
+  // module never loads.
   'app.otherTab': 'Updated from another tab.',
   'app.installed': 'Installed. It works offline now.',
 
@@ -239,7 +240,11 @@ const EN = {
   'pin.offHelp': 'Show this habit’s grid on the MyApps home screen.',
   'pin.onHelp': 'This habit’s grid appears on the MyApps home screen. Tap to remove it.',
   'pin.full': 'The hub holds {n} grids. Remove one first.',
-  'pin.fullHelp': 'The hub holds {n} grids at a time. Remove one from another habit to add this one.',
+  'pin.fullHelp': 'The hub holds {n} grids at a time. Tap to swap one out for this habit.',
+  'pin.swapTitle': 'The hub is full',
+  'pin.swapBody': 'It holds {n} grids at a time. Pick the one to replace.',
+  'pin.replace': 'Replace',
+  'pin.swapped': '{added} replaced {removed} on the hub.',
 
   'theme.ledger': 'Ledger', 'theme.black': 'True black', 'theme.slate': 'Slate',
   'theme.midnight': 'Midnight', 'theme.paper': 'Paper', 'theme.daylight': 'Daylight',
@@ -454,8 +459,6 @@ const PT = {
   'err.generic': 'Não foi possível salvar neste aparelho.',
   'err.parse': 'Não foi possível ler os dados guardados. Eles foram deixados intactos.',
 
-  'sw.updated': 'Uma nova versão está pronta.',
-  'sw.reload': 'Recarregar',
   'app.otherTab': 'Atualizado a partir de outra aba.',
   'app.installed': 'Instalado. Agora funciona offline.',
 
@@ -470,7 +473,11 @@ const PT = {
   'pin.offHelp': 'Mostrar a grade deste hábito na tela inicial do MyApps.',
   'pin.onHelp': 'A grade deste hábito aparece na tela inicial do MyApps. Toque para tirar.',
   'pin.full': 'O hub comporta {n} grades. Tire uma antes.',
-  'pin.fullHelp': 'O hub comporta {n} grades por vez. Tire a de outro hábito para pôr esta.',
+  'pin.fullHelp': 'O hub comporta {n} grades por vez. Toque para trocar uma por este hábito.',
+  'pin.swapTitle': 'O hub está cheio',
+  'pin.swapBody': 'Ele comporta {n} grades por vez. Escolha qual substituir.',
+  'pin.replace': 'Substituir',
+  'pin.swapped': '{added} entrou no lugar de {removed}.',
 
   'theme.ledger': 'Livro-razão', 'theme.black': 'Preto absoluto', 'theme.slate': 'Ardósia',
   'theme.midnight': 'Meia-noite', 'theme.paper': 'Papel', 'theme.daylight': 'Luz do dia',

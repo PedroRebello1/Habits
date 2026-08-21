@@ -776,8 +776,12 @@ export function detail(id) {
   el.appendChild(started);
 
   /** Pinning shows this habit's grid on the hub's home screen. Only a few fit
-   *  before they stop being readable, so the button says why it is unavailable
-   *  rather than simply going dead. */
+   *  before they stop being readable.
+   *
+   *  At the limit the button stays live rather than going disabled: a dead
+   *  button that swallows the tap tells you nothing, so this one answers with
+   *  the reason and a way out — a sheet listing what is already pinned, so the
+   *  swap can be made here instead of visiting the other habit to unpin it. */
   function paintPin() {
     pinBox.textContent = '';
     const pinned = !!hb.pinned;
@@ -786,10 +790,9 @@ export function detail(id) {
     const btn = h('button', {
       type: 'button',
       class: 'btn' + (pinned ? ' btn-primary' : ''),
-      disabled: full,
       onClick: () => {
-        const ok = state.setPinned(hb.id, !pinned);
-        if (!ok) { toast(t('pin.full', { n: state.PIN_LIMIT }), { error: true }); return; }
+        if (full) { openPinSwap(); return; }
+        state.setPinned(hb.id, !pinned);
         hb.pinned = !pinned;
         paintPin();
         toast(t(hb.pinned ? 'pin.added' : 'pin.removed', { name: hb.name }));
@@ -800,6 +803,36 @@ export function detail(id) {
     pinBox.appendChild(h('p', { class: 'help',
       text: full ? t('pin.fullHelp', { n: state.PIN_LIMIT })
         : pinned ? t('pin.onHelp') : t('pin.offHelp') }));
+  }
+
+  /** The hub is full. Offer to drop one of the habits already on it and take
+   *  its place, rather than making the user go and unpin it themselves. */
+  function openPinSwap() {
+    openSheet((sheet, close) => {
+      sheet.appendChild(h('h3', { text: t('pin.swapTitle') }));
+      sheet.appendChild(h('p', { text: t('pin.swapBody', { n: state.PIN_LIMIT }) }));
+
+      const rows = h('div', { class: 'rows' });
+      state.pinnedHabits().forEach((other) => {
+        rows.appendChild(h('button', {
+          type: 'button', class: 'row', style: habitStyle(other),
+          onClick: () => {
+            close();
+            state.setPinned(other.id, false);
+            state.setPinned(hb.id, true);
+            hb.pinned = true;
+            paintPin();
+            toast(t('pin.swapped', { removed: other.name, added: hb.name }));
+          },
+        }, glyph(other), h('span', { text: other.name }),
+           h('span', { class: 'val', text: t('pin.replace') })));
+      });
+      sheet.appendChild(rows);
+      sheet.appendChild(h('button', {
+        type: 'button', class: 'btn', text: t('common.cancel'),
+        style: 'margin-top:14px', onClick: close,
+      }));
+    });
   }
 
   const shiftMonth = (ym, n) => addMonths(ym + '-01', n).slice(0, 7);

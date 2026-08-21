@@ -5,7 +5,7 @@
 // network fallback that repopulates the cache for anything missed. Navigations
 // fall back to the cached index.html so a deep link works offline.
 
-const VERSION = 'habitgrid-v5';
+const VERSION = 'habitgrid-v6';
 const SHELL = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const SHELL = [
   './manifest.webmanifest',
   './js/theme.js',
   './js/theme-boot.js',
+  './js/update.js',
   './js/main.js',
   './js/state.js',
   './js/storage.js',
@@ -27,11 +28,15 @@ const SHELL = [
   './icons/maskable-512.png',
 ];
 
+// No skipWaiting() here on purpose. Activating immediately does not give this
+// worker the pages that are already open — they stay on the previous one until
+// every tab closes, which is why a plain reload used to change nothing. Instead
+// the new worker waits, js/update.js notices it waiting and offers a button,
+// and only then does it take over. See update.js for the full sequence.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
       .then(cache => cache.addAll(SHELL))
-      .then(() => self.skipWaiting())
   );
 });
 

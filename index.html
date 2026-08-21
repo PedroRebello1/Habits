@@ -30,6 +30,11 @@
 -->
 <script src="./js/theme.js"></script>
 <script src="./js/theme-boot.js"></script>
+
+<!-- The update bar, shared with the other apps. Loaded here rather than from
+     main.js so it still appears if the module graph fails to boot — a broken
+     release is exactly when you most want a way to pull the fixed one. -->
+<script src="./js/update.js"></script>
 </head>
 <body>
 

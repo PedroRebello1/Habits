@@ -126,27 +126,16 @@ window.addEventListener('appinstalled', () => {
 
 // -- service worker ----------------------------------------------------------
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Relative path on purpose: on GitHub Pages the site lives at /<repo>/,
-    // and an absolute /sw.js would silently register with the wrong scope.
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
-      reg.addEventListener('updatefound', () => {
-        const next = reg.installing;
-        if (!next) return;
-        next.addEventListener('statechange', () => {
-          if (next.state === 'installed' && navigator.serviceWorker.controller) {
-            views.toast(t('sw.updated'), {
-              action: t('sw.reload'),
-              timeout: 12000,
-              onAction: () => { next.postMessage('skip-waiting'); location.reload(); },
-            });
-          }
-        });
-      });
-    }).catch(() => { /* offline support is a bonus, not a requirement */ });
-  });
-}
+// Registration, the update bar and the reload-after-handover all live in
+// js/update.js, shared with the other apps. The toast this used to show timed
+// out after twelve seconds, and its reload could land before the new worker had
+// taken over — so a missed toast, or an unlucky one, left you on the old
+// version with no way back short of closing every tab.
+window.addEventListener('load', () => {
+  // Relative path on purpose: on GitHub Pages the site lives at /<repo>/, and
+  // an absolute /sw.js would silently register with the wrong scope.
+  window.MyAppsUpdate.init('./sw.js');
+});
 
 // -- boot --------------------------------------------------------------------
 
